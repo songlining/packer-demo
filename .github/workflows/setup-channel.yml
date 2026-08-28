@@ -20,10 +20,9 @@ jobs:
           TOKEN=$(echo "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
           if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
 
-          TOKEN_PAYLOAD=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+')
-          echo "payload b64 (first 80): $(echo "$TOKEN_PAYLOAD" | head -c 80)"
-          CLAIMS=$(echo "$TOKEN_PAYLOAD" | base64 -d 2>&1)
-          echo "claims (first 200): $(echo "$CLAIMS" | head -c 200)"
+          TOKEN_PAYLOAD=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | awk '{l=length($0)%4; if(l==2)$0=$0"=="; else if(l==3)$0=$0"="}1')
+          CLAIMS=$(echo "$TOKEN_PAYLOAD" | base64 -d 2>/dev/null || true)
+          echo "sub claim: $(echo "$CLAIMS" | python3 -c "import json,sys; print(json.load(sys.stdin).get('sub',''))")"
           ORG=$(echo "$CLAIMS" | python3 -c "import json,sys,re; d=json.load(sys.stdin); m=re.search(r'@([0-9a-f-]{36})', d.get('sub','')); print(m.group(1) if m else '')")
           [ -z "$ORG" ] && { echo "claims: $CLAIMS" | head -c 400; exit 1; }
           PROJ=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.hashicorp.cloud/iam/2022-08-01/organizations/$ORG/projects" | python3 -c "
