@@ -21,10 +21,16 @@ jobs:
           if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
 
           CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | awk '{l=length($0)%4; if(l==2)$0=$0"=="; else if(l==3)$0=$0"="}1' | base64 -d 2>/dev/null)
-          ORG=$(echo "$CLAIMS" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('organization_id',''))")
-          PROJ=$(echo "$CLAIMS" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('project_id',''))")
+          ORG=$(echo "$CLAIMS" | python3 -c "import json,sys,re; d=json.load(sys.stdin); m=re.search(r'@([0-9a-f-]{36})', d.get('sub','')); print(m.group(1) if m else '')")
+          [ -z "$ORG" ] && { echo "claims: $CLAIMS" | head -c 400; exit 1; }
+          PROJ=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.hashicorp.cloud/iam/2022-08-01/organizations/$ORG/projects" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          ps=d.get('projects',[])
+          p=[x for x in ps if x.get('name','')=='Default'] or ps
+          print(p[0]['id'] if p else '')")
           echo "org=$ORG project=$PROJ"
-          [ -z "$ORG" ] && { echo "claims keys: $CLAIMS" | head -c 400; exit 1; }
+          [ -z "$PROJ" ] && { echo "no project found"; exit 1; }
           BASE="https://api.hashicorp.cloud/packer/2023-01-01/organizations/$ORG/projects/$PROJ/buckets/base-os"
 
           echo "=== versions ==="
