@@ -13,9 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Decode ID token claims
-        env:
-          ID_TOKEN_URL: ${{ ACTIONS_ID_TOKEN_REQUEST_URL }}
-          ID_TOKEN_TOKEN: ${{ ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
         run: |
           TOKEN=$(curl -s "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
             -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" | python3 -c "import json,sys; print(json.load(sys.stdin)['value'])")
