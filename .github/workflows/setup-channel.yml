@@ -40,7 +40,7 @@ jobs:
 
           echo "=== assign version ==="
           curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d "{\"version_fingerprint\":\"$FP\",\"update_mask\":\"version_fingerprint\"}" "$BASE/channels/production" | head -c 200; echo
+            -d "{\"version_fingerprint\":\"$FP\",\"update_mask\":\"versionFingerprint\"}" "$BASE/channels/production" | head -c 200; echo
 
           echo "=== verify ==="
           curl -s -H "Authorization: Bearer $TOKEN" "$BASE/channels/production" | head -c 200; echo
