@@ -1,0 +1,18 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+packer/packer_manifest.json
+
+# secrets / credentials
+.env
+.env.*
+*.pem
+*.key
+
+# local junk
+.DS_Store
+*.retry
+*.log

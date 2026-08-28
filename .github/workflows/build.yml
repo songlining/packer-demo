@@ -1,0 +1,42 @@
+# Build on merge — "everything starts from a PR" (#13/#17/#18).
+# Packer builds the image, HCP Packer records the version with labels + lineage.
+# Then assign the new version to the `production` channel (HCP UI one click —
+# or wire hcp_packer_channel_assignment later) and run the deploy workflow.
+name: build
+on:
+  push:
+    branches: [main]
+    paths: ['packer/**']
+  workflow_dispatch:
+    inputs:
+      template:
+        description: Packer template to build
+        type: choice
+        default: webapp.pkr.hcl
+        options: [webapp.pkr.hcl, base-os.pkr.hcl, docker.pkr.hcl]
+
+concurrency: packer-build
+
+permissions:
+  id-token: write # OIDC — no static AWS keys
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
+      HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - name: Packer build
+        working-directory: packer
+        run: |
+          packer init .
+          packer build "${{ github.event.inputs.template || 'webapp.pkr.hcl' }}"

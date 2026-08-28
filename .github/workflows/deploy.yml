@@ -1,0 +1,32 @@
+# Deploy on demand — presenter assigns the new version to the `production`
+# channel in the HCP Packer UI (one click, demos the registry GUI), then runs
+# this. The `production` GitHub environment is the approval gate (#22).
+#
+# Prereq: Terraform state must live remotely for CI applies — see GITHUB-SETUP.md.
+name: deploy
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
+      HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+
+      - name: Terraform apply
+        run: |
+          terraform -chdir=terraform init
+          terraform -chdir=terraform apply -auto-approve

@@ -1,0 +1,12 @@
+- hosts: all
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.dnf:
+        name: nginx
+        state: present
+
+    - name: Deploy index page
+      ansible.builtin.copy:
+        content: "<h1>webapp-a from a golden image</h1>\n"
+        dest: /usr/share/nginx/html/index.html
