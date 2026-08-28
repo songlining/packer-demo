@@ -20,25 +20,8 @@ jobs:
           TOKEN=$(echo "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
           if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
 
-          TOKEN_PAYLOAD=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | awk '{l=length($0)%4; if(l==2)$0=$0"=="; else if(l==3)$0=$0"="}1')
-          CLAIMS=$(echo "$TOKEN_PAYLOAD" | base64 -d 2>/dev/null || true)
-          echo "sub claim: $(echo "$CLAIMS" | python3 -c "import json,sys; print(json.load(sys.stdin).get('sub',''))")"
-          ORG=$(echo "$CLAIMS" | python3 -c "import json,sys,re; d=json.load(sys.stdin); m=re.search(r'@([0-9a-f-]{36})', d.get('sub','')); print(m.group(1) if m else '')")
-          [ -z "$ORG" ] && { echo "claims: $CLAIMS" | head -c 400; exit 1; }
-          echo "probe1 orgs:"; curl -s -w " [%{http_code}]" -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/iam/2022-08-01/organizations" | head -c 250; echo
-          echo "probe2 org projects:"; curl -s -w " [%{http_code}]" -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/iam/2022-08-01/organizations/$ORG/projects" | head -c 250; echo
-          echo "probe3 flat projects:"; curl -s -w " [%{http_code}]" -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/iam/2022-08-01/projects" | head -c 250; echo
-          echo "probe4 packer versions w/ dummy proj:"; curl -s -w " [%{http_code}]" -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/$ORG/projects/00000000-0000-0000-0000-000000000000/buckets/base-os/versions" | head -c 250; echo
-          PROJ_RESP=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/iam/2022-08-01/organizations/$ORG/projects")
-          echo "projects raw (first 250): $(echo "$PROJ_RESP" | head -c 250)"
-          PROJ=$(echo "$PROJ_RESP" | python3 -c "
-          import json,sys
-          d=json.load(sys.stdin)
-          ps=d.get('projects',[])
-          p=[x for x in ps if x.get('name','')=='Default'] or ps
-          print(p[0]['id'] if p else '')" 2>/dev/null || true)
-          echo "org=$ORG project=$PROJ"
-          [ -z "$PROJ" ] && { echo "no project found"; exit 1; }
+          ORG="53068552-945f-4bf9-bf0a-71a457d452a3"
+          PROJ="afe3e74a-ee44-4897-a674-c80beb132505"
           BASE="https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/$ORG/projects/$PROJ/buckets/base-os"
 
           echo "=== versions ==="
