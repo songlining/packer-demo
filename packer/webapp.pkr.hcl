@@ -31,8 +31,8 @@ build {
   # CVE scan inside the build — flip --exit-code to 1 to fail the build on findings
   provisioner "shell" {
     inline = [
-      "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin",
-      "trivy rootfs --scanners vuln --severity HIGH,CRITICAL --exit-code 0 /",
+      "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin",
+      "sudo trivy rootfs --scanners vuln --severity HIGH,CRITICAL --exit-code 0 /",
     ]
   }
 
