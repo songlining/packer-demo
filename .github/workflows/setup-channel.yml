@@ -13,28 +13,23 @@ jobs:
     steps:
       - name: Create production channel and assign latest version
         run: |
-                    RESP=$(curl -s https://auth.hashicorp.com/oauth2/token \
+          RESP=$(curl -s https://auth.hashicorp.com/oauth2/token \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud")
-          echo "auth response: $(echo "$RESP" | head -c 150)"
+          echo "auth: $(echo "$RESP" | head -c 100)"
           TOKEN=$(echo "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
-          if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
           if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
 
           CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | awk '{l=length($0)%4; if(l==2)$0=$0"=="; else if(l==3)$0=$0"="}1' | base64 -d 2>/dev/null)
-          ORG=$(echo "$CLAIMS" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('organization_id') or d.get('urn:hashicorp:organization_id',''))")
-          PROJ=$(echo "$CLAIMS" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('project_id') or d.get('urn:hashicorp:project_id',''))")
+          ORG=$(echo "$CLAIMS" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('organization_id',''))")
+          PROJ=$(echo "$CLAIMS" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('project_id',''))")
           echo "org=$ORG project=$PROJ"
-          [ -z "$ORG" ] && { echo "claims: $CLAIMS" | head -c 500; exit 1; }
+          [ -z "$ORG" ] && { echo "claims keys: $CLAIMS" | head -c 400; exit 1; }
           BASE="https://api.hashicorp.cloud/packer/2023-01-01/organizations/$ORG/projects/$PROJ/buckets/base-os"
 
           echo "=== versions ==="
           VERS=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/versions")
-          echo "$VERS" | python3 -c "
-          import json,sys
-          d=json.load(sys.stdin)
-          vs=d.get('versions',[])
-          for v in vs[:5]: print(v.get('version'), v.get('created_at',''), v.get('fingerprint',''))"
+          echo "$VERS" | head -c 300; echo
           FP=$(echo "$VERS" | python3 -c "
           import json,sys
           vs=json.load(sys.stdin).get('versions',[])
@@ -44,11 +39,11 @@ jobs:
 
           echo "=== create channel ==="
           curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d '{"name":"production"}' "$BASE/channels" | head -c 300; echo
+            -d '{"name":"production"}' "$BASE/channels" | head -c 200; echo
 
           echo "=== assign version ==="
           curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d "{\"version_fingerprint\":\"$FP\"}" "$BASE/channels/production" | head -c 300; echo
+            -d "{\"version_fingerprint\":\"$FP\"}" "$BASE/channels/production" | head -c 200; echo
 
           echo "=== verify ==="
-          curl -s -H "Authorization: Bearer $TOKEN" "$BASE/channels/production" | head -c 300; echo
+          curl -s -H "Authorization: Bearer $TOKEN" "$BASE/channels/production" | head -c 200; echo
