@@ -25,6 +25,10 @@ jobs:
           echo "sub claim: $(echo "$CLAIMS" | python3 -c "import json,sys; print(json.load(sys.stdin).get('sub',''))")"
           ORG=$(echo "$CLAIMS" | python3 -c "import json,sys,re; d=json.load(sys.stdin); m=re.search(r'@([0-9a-f-]{36})', d.get('sub','')); print(m.group(1) if m else '')")
           [ -z "$ORG" ] && { echo "claims: $CLAIMS" | head -c 400; exit 1; }
+          echo "probe1 orgs:"; curl -s -w " [%{http_code}]" -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/iam/2022-08-01/organizations" | head -c 250; echo
+          echo "probe2 org projects:"; curl -s -w " [%{http_code}]" -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/iam/2022-08-01/organizations/$ORG/projects" | head -c 250; echo
+          echo "probe3 flat projects:"; curl -s -w " [%{http_code}]" -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/iam/2022-08-01/projects" | head -c 250; echo
+          echo "probe4 packer versions w/ dummy proj:"; curl -s -w " [%{http_code}]" -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/$ORG/projects/00000000-0000-0000-0000-000000000000/buckets/base-os/versions" | head -c 250; echo
           PROJ_RESP=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/iam/2022-08-01/organizations/$ORG/projects")
           echo "projects raw (first 250): $(echo "$PROJ_RESP" | head -c 250)"
           PROJ=$(echo "$PROJ_RESP" | python3 -c "
