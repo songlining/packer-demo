@@ -13,19 +13,12 @@ jobs:
     steps:
       - name: Create production channel and assign latest version
         run: |
-          echo "variant A: form + audience"
-          curl -s https://auth.hashicorp.com/oauth/token -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" | head -c 120; echo
-          echo "variant B: basic auth + audience"
-          curl -s https://auth.hashicorp.com/oauth/token -u "$HCP_CLIENT_ID:$HCP_CLIENT_SECRET" \
-            -d "grant_type=client_credentials&audience=https://api.hashicorp.cloud" | head -c 120; echo
-          echo "variant C: form, no audience"
-          curl -s https://auth.hashicorp.com/oauth/token -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET" | head -c 120; echo
-          echo "variant D: audience api.hashicorp.cloud/domain"
-          curl -s https://auth.hashicorp.com/oauth/token -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=api.hashicorp.cloud" | head -c 120; echo
-          exit 1
+                    RESP=$(curl -s https://auth.hashicorp.com/oauth2/token \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud")
+          echo "auth response: $(echo "$RESP" | head -c 150)"
+          TOKEN=$(echo "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+          if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
           if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
 
           CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | awk '{l=length($0)%4; if(l==2)$0=$0"=="; else if(l==3)$0=$0"="}1' | base64 -d 2>/dev/null)
