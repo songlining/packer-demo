@@ -5,7 +5,7 @@
 # the output AMI is built on a blank attached volume, from scratch.
 # Rootfs ~150MB, build ~5min total, boots in seconds.
 
-variable "patch_level" {
+variable "alpine_patch_level" {
   type    = string
   default = "2026-08"
 }
@@ -60,7 +60,7 @@ source "amazon-ebssurrogate" "scratch" {
 
   ami_description = "Alpine 3.22 built from scratch (amazon-ebssurrogate), no base AMI bits"
   tags = {
-    patch-level = var.patch_level
+    patch-level = var.alpine_patch_level
     owner       = "platform-team"
     os          = "alpine-322-fromscratch"
   }

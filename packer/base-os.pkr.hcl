@@ -1,12 +1,3 @@
-packer {
-  required_plugins {
-    amazon = {
-      version = ">= 1.3.0"
-      source  = "github.com/hashicorp/amazon"
-    }
-  }
-}
-
 variable "patch_level" {
   type    = string
   default = "2026-08"

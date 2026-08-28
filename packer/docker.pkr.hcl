@@ -2,15 +2,6 @@
 # Build: packer build docker.pkr.hcl
 # Deploy = push: `docker login`, then uncomment the docker-push post-processor.
 
-packer {
-  required_plugins {
-    docker = {
-      version = ">= 1.1.0"
-      source  = "github.com/hashicorp/docker"
-    }
-  }
-}
-
 variable "tag" {
   type    = string
   default = "1.0.0"

@@ -1,16 +1,3 @@
-packer {
-  required_plugins {
-    amazon = {
-      version = ">= 1.3.0"
-      source  = "github.com/hashicorp/amazon"
-    }
-    ansible = {
-      version = ">= 1.1.0"
-      source  = "github.com/hashicorp/ansible"
-    }
-  }
-}
-
 hcp_packer_registry {
   bucket_name   = "webapp-a"
   description   = "App image layered on the base-os channel parent — one package, full lineage"
