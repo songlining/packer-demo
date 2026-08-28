@@ -13,10 +13,11 @@ jobs:
     steps:
       - name: Create production channel and assign latest version
         run: |
-          TOKEN=$(curl -s https://auth.hashicorp.com/oauth/token \
+          RESP=$(curl -s https://auth.hashicorp.com/oauth/token \
             -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" \
-            | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud")
+          echo "auth response: $(echo "$RESP" | head -c 200)"
+          TOKEN=$(echo "$RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
           if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
 
           CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | awk '{l=length($0)%4; if(l==2)$0=$0"=="; else if(l==3)$0=$0"="}1' | base64 -d 2>/dev/null)
