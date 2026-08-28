@@ -19,6 +19,30 @@ Packer + HCP Packer + Terraform — a partner walkthrough
 
 <!-- end_slide -->
 
+Prep — is everything ready?
+===========================
+
+```bash +exec
+# export AWS_PROFILE=personal
+[ -f Makefile ] || cd ..
+echo "== AWS session"
+aws --profile personal sts get-caller-identity --query Account --output text
+echo "== GitHub CLI"
+gh auth status 2>&1 | grep -m1 "Logged in"
+echo "== HCP principal"
+[ -n "$HCP_CLIENT_ID" ] && echo "HCP_CLIENT_ID set" || echo "HCP creds MISSING"
+env | grep -q AWS_SESSION_TOKEN && echo "WARN - stale AWS_* env keys shadow the profile; unset them"
+echo "== webapp-a production channel"
+TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+curl -s -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/webapp-a/channels/production" | python3 -c "import json,sys; c=json.load(sys.stdin).get('channel',{}); print('production ->', (c.get('version') or {}).get('fingerprint','NOT ASSIGNED'))"
+```
+
+All four checks green — the demo cannot hit a wall mid-flow.
+
+<!-- speaker_note: Run this before every delivery. The AWS check catches an expired SSO token, the channel check catches a missing version assignment - the two failures that stall this demo -->
+
+<!-- end_slide -->
+
 The product in one slide
 ========================
 
@@ -328,8 +352,8 @@ no package-level diff. A seller who says that first is a trusted one.
 
 <!-- end_slide -->
 
-Cleanup / Reset
-===============
+Cleanup
+=======
 
 Tear down the demo instance so the next run starts clean.
 
@@ -339,4 +363,24 @@ Tear down the demo instance so the next run starts clean.
 cd terraform && terraform destroy -auto-approve
 ```
 
-<!-- speaker_note: Run this after the demo. Skip it only if the audience wants to keep the instance for exploration. The registry versions and channels can stay — they are metadata, not cost. -->
+<!-- speaker_note: Run this after the demo. Skip it only if the audience wants to keep the instance for exploration. The registry versions and channels can stay - they are metadata, not cost. -->
+
+<!-- end_slide -->
+
+Reset for another round
+=======================
+
+```bash +exec
+# export AWS_PROFILE=personal
+[ -f Makefile ] || cd ..
+git restore packer/webapp.pkr.hcl 2>/dev/null || true
+git status --short
+echo "repo clean — relaunch the deck with: make deck"
+echo "channel is still pinned; slide 'deploy from the channel' applies again"
+```
+
+One round leaves no residue — the instance is gone, the repo is untouched,
+and the channel still points at the latest version. Re-running the demo
+is `terraform apply` on slide thirteen.
+
+<!-- speaker_note: If the red-build flip was performed live, git restore reverts it. The registry keeps every version - history is an asset, not residue. -->
