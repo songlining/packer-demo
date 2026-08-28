@@ -1,0 +1,52 @@
+# One-off: create the `production` channel on base-os and assign the latest
+# version, so webapp.pkr.hcl's datasource can resolve its parent. Delete after.
+name: setup-channel
+on:
+  workflow_dispatch:
+
+jobs:
+  channel:
+    runs-on: ubuntu-latest
+    env:
+      HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
+      HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
+    steps:
+      - name: Create production channel and assign latest version
+        run: |
+          TOKEN=$(curl -s https://auth.hashicorp.com/oauth/token \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+          if [ -z "$TOKEN" ]; then echo "token fetch failed"; exit 1; fi
+
+          CLAIMS=$(echo "$TOKEN" | cut -d. -f2 | tr '_-' '/+' | awk '{l=length($0)%4; if(l==2)$0=$0"=="; else if(l==3)$0=$0"="}1' | base64 -d 2>/dev/null)
+          ORG=$(echo "$CLAIMS" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('organization_id') or d.get('urn:hashicorp:organization_id',''))")
+          PROJ=$(echo "$CLAIMS" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('project_id') or d.get('urn:hashicorp:project_id',''))")
+          echo "org=$ORG project=$PROJ"
+          [ -z "$ORG" ] && { echo "claims: $CLAIMS" | head -c 500; exit 1; }
+          BASE="https://api.hashicorp.cloud/packer/2023-01-01/organizations/$ORG/projects/$PROJ/buckets/base-os"
+
+          echo "=== versions ==="
+          VERS=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/versions")
+          echo "$VERS" | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          vs=d.get('versions',[])
+          for v in vs[:5]: print(v.get('version'), v.get('created_at',''), v.get('fingerprint',''))"
+          FP=$(echo "$VERS" | python3 -c "
+          import json,sys
+          vs=json.load(sys.stdin).get('versions',[])
+          vs.sort(key=lambda v: v.get('created_at',''), reverse=True)
+          print(vs[0]['fingerprint'] if vs else '')")
+          echo "latest fingerprint: $FP"
+
+          echo "=== create channel ==="
+          curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d '{"name":"production"}' "$BASE/channels" | head -c 300; echo
+
+          echo "=== assign version ==="
+          curl -s -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"version_fingerprint\":\"$FP\"}" "$BASE/channels/production" | head -c 300; echo
+
+          echo "=== verify ==="
+          curl -s -H "Authorization: Bearer $TOKEN" "$BASE/channels/production" | head -c 300; echo
