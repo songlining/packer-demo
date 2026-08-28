@@ -25,12 +25,14 @@ jobs:
           echo "sub claim: $(echo "$CLAIMS" | python3 -c "import json,sys; print(json.load(sys.stdin).get('sub',''))")"
           ORG=$(echo "$CLAIMS" | python3 -c "import json,sys,re; d=json.load(sys.stdin); m=re.search(r'@([0-9a-f-]{36})', d.get('sub','')); print(m.group(1) if m else '')")
           [ -z "$ORG" ] && { echo "claims: $CLAIMS" | head -c 400; exit 1; }
-          PROJ=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.hashicorp.cloud/iam/2022-08-01/organizations/$ORG/projects" | python3 -c "
+          PROJ_RESP=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.hashicorp.cloud/iam/2022-08-01/organizations/$ORG/projects")
+          echo "projects raw (first 250): $(echo "$PROJ_RESP" | head -c 250)"
+          PROJ=$(echo "$PROJ_RESP" | python3 -c "
           import json,sys
           d=json.load(sys.stdin)
           ps=d.get('projects',[])
           p=[x for x in ps if x.get('name','')=='Default'] or ps
-          print(p[0]['id'] if p else '')")
+          print(p[0]['id'] if p else '')" 2>/dev/null || true)
           echo "org=$ORG project=$PROJ"
           [ -z "$PROJ" ] && { echo "no project found"; exit 1; }
           BASE="https://api.hashicorp.cloud/packer/2023-01-01/organizations/$ORG/projects/$PROJ/buckets/base-os"
