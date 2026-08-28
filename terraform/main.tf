@@ -35,3 +35,7 @@ resource "aws_instance" "app" {
     channel = "production"
   }
 }
+
+output "public_ip" {
+  value = aws_instance.app.public_ip
+}
