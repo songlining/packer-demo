@@ -1,7 +1,10 @@
 # Build on merge — "everything starts from a PR" (#13/#17/#18).
 # Packer builds the image, HCP Packer records the version with labels + lineage.
-# Then assign the new version to the `production` channel (HCP UI one click —
-# or wire hcp_packer_channel_assignment later) and run the deploy workflow.
+#
+# Cascade: a base-os build re-pins the base-os/production channel to the new
+# version via the HCP API, then dispatches the webapp build so the downstream
+# image picks up the new parent. webapp-a promotion stays a human step —
+# assign it in the HCP UI (one click), then run the deploy workflow.
 name: build
 on:
   push:
@@ -14,12 +17,17 @@ on:
         type: choice
         default: webapp.pkr.hcl
         options: [webapp.pkr.hcl, base-os.pkr.hcl, docker.pkr.hcl]
+      patch_level:
+        description: patch-level label (base-os only)
+        type: string
+        default: ""
 
 concurrency: packer-build
 
 permissions:
   id-token: write # OIDC — no static AWS keys
   contents: read
+  actions: write  # dispatch the downstream webapp build on base-os changes
 
 jobs:
   build:
@@ -30,6 +38,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Pick template (input wins; base-os changes cascade)
+        id: pick
+        run: |
+          INPUT="${{ github.event.inputs.template }}"
+          if [ -n "$INPUT" ]; then
+            T="$INPUT"
+          elif git diff --name-only HEAD~1 2>/dev/null | grep -q "base-os.pkr.hcl"; then
+            T="base-os.pkr.hcl"
+          else
+            T="webapp.pkr.hcl"
+          fi
+          echo "template=$T" >> "$GITHUB_OUTPUT"
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -39,4 +60,33 @@ jobs:
         working-directory: packer
         run: |
           packer init .
-          packer build "${{ github.event.inputs.template || 'webapp.pkr.hcl' }}"
+          if [ "${{ steps.pick.outputs.template }}" = "base-os.pkr.hcl" ]; then
+            PL="${{ github.event.inputs.patch_level }}"
+            PL="${PL:-$(date +%Y-%m)}"
+            packer build -var "patch_level=$PL" base-os.pkr.hcl
+          else
+            packer build "${{ steps.pick.outputs.template }}"
+          fi
+
+      - name: Pin base-os channel and cascade to webapp
+        if: steps.pick.outputs.template == 'base-os.pkr.hcl'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+          BASE="https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/base-os"
+          FP=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/versions" \
+            | python3 -c "
+          import json,sys
+          vs=json.load(sys.stdin)['versions']
+          vs.sort(key=lambda v: v['created_at'], reverse=True)
+          print(vs[0]['fingerprint'])")
+          echo "pinning base-os/production -> $FP"
+          curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"version_fingerprint\":\"$FP\",\"update_mask\":\"versionFingerprint\"}" \
+            "$BASE/channels/production" | head -c 200; echo
+          echo "cascading: dispatching webapp build"
+          gh workflow run build.yml -f template=webapp.pkr.hcl
