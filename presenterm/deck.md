@@ -32,14 +32,23 @@ gh auth status 2>&1 | grep -m1 "Logged in"
 echo "== HCP principal"
 [ -n "$HCP_CLIENT_ID" ] && echo "HCP_CLIENT_ID set" || echo "HCP creds MISSING"
 env | grep -q AWS_SESSION_TOKEN && echo "WARN - stale AWS_* env keys shadow the profile; unset them"
-echo "== webapp-a production channel"
+echo "== webapp-a production channel (expect N-1)"
 TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
-curl -s -H "Authorization: Bearer $TOKEN" "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/webapp-a/channels/production" | python3 -c "import json,sys; c=json.load(sys.stdin).get('channel',{}); print('production ->', (c.get('version') or {}).get('fingerprint','NOT ASSIGNED'))"
+python3 - "$TOKEN" <<'EOF'
+import json, sys, urllib.request
+H = {"Authorization": "Bearer " + sys.argv[1]}
+base = "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/webapp-a"
+get = lambda p: json.load(urllib.request.urlopen(urllib.request.Request(base + p, headers=H)))
+prod = get("/channels/production")["channel"]["version"]["fingerprint"]
+vers = sorted(get("/versions")["versions"], key=lambda v: v["created_at"])
+print("production ->", prod[:16], " latest ->", vers[-1]["fingerprint"][:16])
+print("OK - production is N-1; the promotion click will move the pin" if prod == vers[-2]["fingerprint"] else "WARN - production is on latest; roll it back one or the promotion is a no-op")
+EOF
 ```
 
 All four checks green — the demo cannot hit a wall mid-flow.
 
-<!-- speaker_note: Run this before every delivery. The AWS check catches an expired SSO token, the channel check catches a missing version assignment - the two failures that stall this demo -->
+<!-- speaker_note: Run this before every delivery. The AWS check catches an expired SSO token; the channel check catches production sitting on the latest build - which would turn the promotion step into a no-op -->
 
 <!-- end_slide -->
 
@@ -80,7 +89,7 @@ The world as-is
 - Nobody can say which instance runs which image
 - Auditors ask for evidence; screenshots are the evidence
 
-This is the starting line for most AWS customers.
+This is the starting line for most customers.
 
 <!-- end_slide -->
 
@@ -108,6 +117,46 @@ What if patch day was just a merge?
 
 <!-- end_slide -->
 
+The building blocks
+===================
+
+HCP Packer is five nouns. Everything the demos show is built from these.
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+<!-- list_item_newlines: 2 -->
+
+- **Bucket** — one image family, one owning team (`base-os`, `webapp-a`)
+- **Version** — an immutable build of a bucket; fingerprint + labels, never mutated
+- **Label** — key/value metadata on a version (`patch-level`, `owner`)
+- **Channel** — a named, movable pointer to one version; the only thing that changes (`dev`, `staging`, `production`)
+- **Lineage** — every build remembers its parent version — an audit tree, not a guess
+
+<!-- column: 1 -->
+
+```
+bucket: webapp-a
+┌──────────────────────────────────┐
+│ v3   fingerprint · labels newest │
+│ v2   ◄── production pins this    │
+│ v1   revoked — the kill switch   │
+└─────────────────┬────────────────┘
+                  ▼
+   channel: production → v2
+                  ▼
+    Terraform reads the channel
+
+lineage: base-os ──► webapp-a
+```
+
+<!-- reset_layout -->
+
+<!-- speaker_note: Say the five nouns out loud before the next slide wires them together. Point at v2 and v3 - the demo replays exactly this, a fresh build waiting while production sits one version back, promoted with one click. -->
+
+<!-- end_slide -->
+
 How it fits together
 ====================
 
@@ -118,14 +167,22 @@ How it fits together
 ```
   PR ──► GitHub Actions
         validate gate
+               │
+               │
                ▼
          Packer build
         Trivy + Ansible
+               │
+               │
                ▼
      HCP Packer registry
    versions · labels · lineage
+               │
+               │
                ▼
      production channel
+               │
+               │
                ▼
    Terraform apply ──► EC2
  tagged: image + channel
@@ -142,22 +199,57 @@ Every arrow is code in one Git repo.
 The repo is the demo
 ====================
 
-```bash +exec
-[ -f packer/webapp.pkr.hcl ] || cd ..
-ls packer/ terraform/ .github/workflows/
-echo ---
-sed -n '1,20p' packer/webapp.pkr.hcl
+Where each stage of that pipeline lives:
+
+```
+packer/
+  base-os.pkr.hcl         AL2023 base image → bucket "base-os"
+  webapp.pkr.hcl          app layer; parent = base-os/production
+  playbooks/webapp.yml    what goes inside — nginx + index page
+.github/workflows/
+  validate.yml            the PR gate — packer · ansible · terraform
+  build.yml               merge → build → scan → publish → cascade
+  deploy.yml              manual dispatch, environment-gated
+terraform/
+  main.tf                 production channel → EC2 — no AMI IDs
 ```
 
-<!-- speaker_note: Walk the three Packer templates, the Ansible playbook, and the two workflows. Everything the audience will see run lives in this one Git repository. -->
+That's the entire system. The demos that follow run only these files.
+
+<!-- speaker_note: Point at each stage of the previous diagram and name its file. Two bonus templates exist (from-scratch, docker) but stay off today's path. -->
+
+<!-- end_slide -->
+
+Two images, one lineage
+=======================
+
+The demo bakes two images — a foundation and what runs on it.
+
+<!-- list_item_newlines: 2 -->
+
+- **`base-os`** — bare Amazon Linux 2023, owned by the platform team; the value is the metadata chain, not the bytes
+- **`webapp-a`** — the app image; its source AMI is whatever `base-os/production` points at, resolved from the registry at build time
+- **The link is lineage** — HCP Packer records `webapp-a` as a child of that exact base version, visible as a tree
+
+Rebake the base, republish its channel, and the child rebuilds on top —
+foundation and apps move together, with the ancestry to prove it.
 
 <!-- end_slide -->
 
 Demo — the PR gate
 ==================
 
-Open a pull request against the repo and GitHub Actions runs
-`validate` — Packer validate, Ansible syntax check, Terraform validate.
+A pull request against the repo triggers `validate` — Packer validate,
+Ansible syntax check, Terraform validate. Ctrl+e opens the PR live:
+
+```bash +exec
+[ -f packer/webapp.pkr.hcl ] || cd ..
+git checkout -b demo/update-index 2>/dev/null || git checkout demo/update-index
+sed -i '' "s|<h1>.*</h1>|<h1>webapp-a from a golden image ($(date +%H:%M))</h1>|" packer/playbooks/webapp.yml
+git commit -am "demo: update index page"
+git push -u origin demo/update-index
+gh pr view demo/update-index --json url -q .url 2>/dev/null || gh pr create --fill
+```
 
 Nothing merges until the image definition is proven sound.
 
@@ -166,26 +258,36 @@ Nothing merges until the image definition is proven sound.
 - `validate.yml` — per-template checks, no cloud credentials needed
 - Red check blocks the merge — the gate is the branch policy
 
-<!-- speaker_note: Switch to the browser here. Show the checks tab on a real PR. This is the pre-deployment testing story from the requirements list. -->
+<!-- speaker_note: Ctrl+e creates the PR - or updates it if it already exists, reruns push a fresh timestamp commit to the same PR. Then switch to the browser and show the checks tab. The PR must touch packer/ or terraform/ or validate.yml will not run. This is the pre-deployment testing story from the requirements list. -->
 
 <!-- end_slide -->
 
 Demo — merge, and the build runs
 ================================
 
+The merge is a git operation; the build is a consequence. Ctrl+e merges,
+then the Actions tab shows the run queuing:
+
 ```bash +exec
-gh run list --workflow=build.yml --limit 5
-LAST=$(gh run list -w build.yml -L 1 --json databaseId -q '.[0].databaseId')
-gh run view "$LAST" --log | grep -iE "Trivy|PLAY RECAP|Published|Tracking" | tail -4
+gh pr merge demo/update-index --squash --delete-branch
+sleep 8
+gh run list --workflow=build.yml --limit 3
 ```
 
-Merge to `main` triggers the build — Trivy scans, Ansible provisions,
-Packer publishes the version to HCP Packer. No human touches a console.
+Trivy scans, Ansible provisions, Packer publishes — hands off. The log
+below is the pipeline's previous run, the same four stages this run will
+repeat:
+
+```bash +exec
+LAST=$(gh run list -w build.yml --status success -L 1 --json databaseId -q '.[0].databaseId')
+echo "----- output of gh run view ----"
+gh run view "$LAST" --log | grep -iE "Trivy|PLAY RECAP|Published|Tracking" | tail -4
+```
 
 Change `base-os` instead? The workflow re-pins the base channel and
 dispatches the webapp build — downstream images rebuild themselves.
 
-<!-- speaker_note: If time allows, dispatch a fresh build live with gh workflow run and watch it stream. The recent green history proves the pipeline is real. A base-os rebuild with a new patch level cascades automatically into a webapp rebuild - that is the lineage propagation story. -->
+<!-- speaker_note: The live build takes about six minutes - it finishes while you walk the portal slides, and the version it publishes lands in HCP Packer unassigned. The greped log is the previous run of the identical pipeline. Switch to the browser if you want the Actions tab visual while the run queues. -->
 
 <!-- end_slide -->
 
@@ -209,7 +311,9 @@ Demo — channels are the pin
 
 A channel is a named pointer to one version — `dev`, `staging`, `production`.
 
-Assign the new version to `production` in the UI. One click.
+The build just landed as a version, but nothing points at it — and `production`
+is deliberately pinned one build behind. Assign the fresh version to
+`production` in the UI. That click is the whole promotion.
 
 <!-- list_item_newlines: 2 -->
 
@@ -230,10 +334,11 @@ Demo — deploy from the channel
 terraform -chdir=terraform apply -auto-approve
 ```
 
-Terraform resolves the `production` channel and launches the instance.
-No AMI ID appears anywhere in the code.
+Terraform resolves the `production` channel and applies the change — since
+production just moved, the instance is replaced with the new AMI. No AMI ID
+appears anywhere in the code; the fleet follows the pin.
 
-<!-- speaker_note: Point out the datasource resolving the channel at apply time. The only pin in the whole system is the channel assignment. -->
+<!-- speaker_note: Point out the datasource resolving the channel at apply time. Because the channel moved, terraform replaces the instance - promotion is a channel click plus an apply, and the diff shows the AMI swap. -->
 
 <!-- end_slide -->
 
@@ -356,12 +461,22 @@ Reset for another round
 [ -f Makefile ] || cd ..
 git restore packer/webapp.pkr.hcl 2>/dev/null || true
 git status --short
-echo "repo clean — relaunch the deck with: make deck"
-echo "channel is still pinned; slide 'deploy from the channel' applies again"
+echo "== roll production back to N-1 so the promotion story replays"
+TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
+python3 - "$TOKEN" <<'EOF'
+import json, sys, urllib.request
+H = {"Authorization": "Bearer " + sys.argv[1], "Content-Type": "application/json"}
+base = "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/webapp-a"
+vers = sorted(json.load(urllib.request.urlopen(urllib.request.Request(base + "/versions", headers=H)))["versions"], key=lambda v: v["created_at"])
+body = json.dumps({"version_fingerprint": vers[-2]["fingerprint"], "update_mask": "versionFingerprint"}).encode()
+urllib.request.urlopen(urllib.request.Request(base + "/channels/production", body, H, method="PATCH"))
+print("production ->", vers[-2]["fingerprint"][:16], "(N-1); latest", vers[-1]["fingerprint"][:16], "left unassigned")
+EOF
+echo "relaunch the deck with: make deck"
 ```
 
-One round leaves no residue — the instance is gone, the repo is untouched,
-and the channel still points at the latest version. Re-running the demo
-is `terraform apply` on slide thirteen.
+One round leaves no residue — the instance is destroyed, the repo is untouched,
+and production sits one build behind the latest again. The promotion click and
+the apply both replay on the next run.
 
-<!-- speaker_note: If the red-build flip was performed live, git restore reverts it. The registry keeps every version - history is an asset, not residue. -->
+<!-- speaker_note: If the red-build flip was performed live, git restore reverts it. Rolling production back to N-1 is what makes the demo repeatable - the registry keeps every version, history is an asset, not residue. -->
