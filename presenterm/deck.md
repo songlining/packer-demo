@@ -143,36 +143,6 @@ Every arrow is code in one Git repo.
 
 <!-- end_slide -->
 
-Positioning — EC2 Image Builder vs Packer + HCP Packer
-======================================================
-
-<!-- list_item_newlines: 2 -->
-<!-- column_layout: [1, 1] -->
-
-<!-- column: 0 -->
-
-**EC2 Image Builder**
-
-- AWS-only, managed UI pipelines
-- Recipe-based, no code review flow
-- Distribution inside AWS
-- Fine for AWS-only shops
-
-<!-- column: 1 -->
-
-**Packer + HCP Packer**
-
-- One config — AWS, Azure, GCP, Docker
-- HCL in Git — PRs, review, audit
-- Registry with lineage + revocation
-- Channels consumed natively by Terraform
-
-<!-- reset_layout -->
-
-Sell both honestly. Code-first multi-cloud is where we win.
-
-<!-- end_slide -->
-
 The repo is the demo
 ====================
 
