@@ -26,7 +26,7 @@ data "hcp_packer_artifact" "webapp" {
 }
 
 resource "aws_security_group" "web" {
-  name   = "golden-image-demo-web"
+  name = "golden-image-demo-web"
 
   ingress {
     from_port   = 80
@@ -44,9 +44,9 @@ resource "aws_security_group" "web" {
 }
 
 resource "aws_instance" "app" {
-  ami                       = data.hcp_packer_artifact.webapp.external_identifier
-  instance_type             = "t3.micro"
-  vpc_security_group_ids    = [aws_security_group.web.id]
+  ami                    = data.hcp_packer_artifact.webapp.external_identifier
+  instance_type          = "t3.micro"
+  vpc_security_group_ids = [aws_security_group.web.id]
 
   tags = {
     Name    = "golden-image-demo"
