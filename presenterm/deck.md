@@ -116,19 +116,28 @@ How it fits together
 <!-- column: 1 -->
 
 ```
- PR ──► GitHub Actions ──► Packer build
- validate gate            Trivy + Ansible
-                               │
-                               ▼
-                    HCP Packer registry
-                    versions · labels · lineage
-                               │
-        ┌── production channel ┘
-        ▼
- Terraform apply ──► EC2, tagged with image + channel
+  PR ──► GitHub Actions
+        validate gate
+               │
+               ▼
+         Packer build
+        Trivy + Ansible
+               │
+               ▼
+     HCP Packer registry
+   versions · labels · lineage
+               │
+               ▼
+     production channel
+               │
+               ▼
+   Terraform apply ──► EC2
+ tagged: image + channel
 ```
 
 <!-- reset_layout -->
+
+<!-- alignment: center -->
 
 Every arrow is code in one Git repo.
 
