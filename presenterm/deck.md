@@ -118,18 +118,14 @@ How it fits together
 ```
   PR ──► GitHub Actions
         validate gate
-               │
                ▼
          Packer build
         Trivy + Ansible
-               │
                ▼
      HCP Packer registry
    versions · labels · lineage
-               │
                ▼
      production channel
-               │
                ▼
    Terraform apply ──► EC2
  tagged: image + channel
