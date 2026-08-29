@@ -10,3 +10,9 @@
       ansible.builtin.copy:
         content: "<h1>webapp-a from a golden image</h1>\n"
         dest: /usr/share/nginx/html/index.html
+
+    - name: Enable and start nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: true
