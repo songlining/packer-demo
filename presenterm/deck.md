@@ -205,7 +205,10 @@ gh run view "$LAST" --log | grep -iE "Trivy|PLAY RECAP|Published|Tracking" | tai
 Merge to `main` triggers the build — Trivy scans, Ansible provisions,
 Packer publishes the version to HCP Packer. No human touches a console.
 
-<!-- speaker_note: If time allows, dispatch a fresh build live with gh workflow run and watch it stream. The recent green history proves the pipeline is real. -->
+Change `base-os` instead? The workflow re-pins the base channel and
+dispatches the webapp build — downstream images rebuild themselves.
+
+<!-- speaker_note: If time allows, dispatch a fresh build live with gh workflow run and watch it stream. The recent green history proves the pipeline is real. A base-os rebuild with a new patch level cascades automatically into a webapp rebuild - that is the lineage propagation story. -->
 
 <!-- end_slide -->
 
