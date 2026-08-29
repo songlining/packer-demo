@@ -88,6 +88,7 @@ The treadmill
 =============
 
 <!-- incremental_lists: true -->
+<!-- list_item_newlines: 2 -->
 
 - How many golden images does the customer maintain today?
 - How often is each one rebaked — and by whom, on what?
@@ -136,6 +137,7 @@ Every arrow is code in one Git repo.
 Positioning — EC2 Image Builder vs Packer + HCP Packer
 ======================================================
 
+<!-- list_item_newlines: 2 -->
 <!-- column_layout: [1, 1] -->
 
 <!-- column: 0 -->
@@ -344,6 +346,7 @@ Recap — what we proved
 
 <!-- jump_to_middle -->
 <!-- alignment: center -->
+<!-- list_item_newlines: 2 -->
 
 1. A PR validates the image definition before anything runs
 2. A merge builds, scans, and publishes — hands off
