@@ -104,7 +104,7 @@ Multiply their answers. That is the cost of the status quo.
 <!-- alignment: center -->
 <!-- font_size: 2 -->
 
-What if image lifecycle was a pipeline — not a project?
+What if patch day was just a merge?
 
 <!-- end_slide -->
 
