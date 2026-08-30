@@ -23,7 +23,7 @@ Prep — is everything ready?
 ===========================
 
 ```bash +exec
-# export AWS_PROFILE=personal
+export AWS_PROFILE=personal
 [ -f Makefile ] || cd ..
 echo "== AWS session"
 aws --profile personal sts get-caller-identity --query Account --output text
@@ -321,24 +321,34 @@ is deliberately pinned one build behind. Assign the fresh version to
 - Roll forward is an assignment; roll back is an assignment
 - Revocation marks a version bad for compliance trails
 
-<!-- speaker_note: Assign the just-built version to production while the audience watches. Then the next slide deploys from that channel. -->
+<!-- speaker_note: Assign the just-built version to production while the audience watches. Then the next slide shows what deploys it - not a laptop, the deploy workflow in CI. -->
 
 <!-- end_slide -->
 
 Demo — deploy from the channel
 ==============================
 
-```bash +exec
-# export AWS_PROFILE=personal
-[ -f terraform/main.tf ] || cd ..
-terraform -chdir=terraform apply -auto-approve
+No laptop apply — the deployment runs where every other stage runs:
+in the pipeline.
+
+```yaml
+# .github/workflows/deploy.yml — the whole deployment
+on: workflow_dispatch               # a human pulls the trigger
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: production         # the approval gate
+    env:
+      TFE_TOKEN: ${{ secrets.TFE_TOKEN }}   # the only credential
+    steps:
+      - run: terraform apply        # executes remotely in HCP Terraform
 ```
 
-Terraform resolves the `production` channel and applies the change — since
-production just moved, the instance is replaced with the new AMI. No AMI ID
-appears anywhere in the code; the fleet follows the pin.
+The channel decides; HCP Terraform executes. The run resolves `production`
+at apply time, authenticates to AWS via dynamic credentials (OIDC role
+scoped to this workspace's runs) — no AMI IDs and no static keys anywhere.
 
-<!-- speaker_note: Point out the datasource resolving the channel at apply time. Because the channel moved, terraform replaces the instance - promotion is a channel click plus an apply, and the diff shows the AMI swap. -->
+<!-- speaker_note: If the audience wants to see it live, gh workflow run deploy.yml triggers the run and the production environment approval appears in the Actions tab - about two minutes end to end. Terraform is one consumer of the channel - any API-capable tool can resolve it the same way. Left as a talk-through so demo time goes to the registry story instead of a progress bar. --> -->
 
 <!-- end_slide -->
 
@@ -346,7 +356,7 @@ Demo — proof
 ============
 
 ```bash +exec
-# export AWS_PROFILE=personal
+export AWS_PROFILE=personal
 [ -f terraform/main.tf ] || cd ..
 cd terraform
 curl -s "http://$(terraform output -raw public_ip)"
@@ -354,6 +364,8 @@ aws ec2 describe-tags --filters "Name=resource-id,Values=$(aws ec2 describe-inst
 ```
 
 The page comes from the golden image; the tags prove which one.
+
+<!-- speaker_note: This instance was deployed by deploy.yml on an earlier run - the curl shows the baked page and the tags prove which image and channel. Today's promotion deploys the same way after the talk. -->
 
 <!-- end_slide -->
 
@@ -444,7 +456,7 @@ Cleanup
 Tear down the demo instance so the next run starts clean.
 
 ```bash +exec
-# export AWS_PROFILE=personal
+export AWS_PROFILE=personal
 [ -f terraform/main.tf ] || cd ..
 cd terraform && terraform destroy -auto-approve
 ```
@@ -457,7 +469,7 @@ Reset for another round
 =======================
 
 ```bash +exec
-# export AWS_PROFILE=personal
+export AWS_PROFILE=personal
 [ -f Makefile ] || cd ..
 git restore packer/webapp.pkr.hcl 2>/dev/null || true
 git status --short
