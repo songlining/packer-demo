@@ -102,6 +102,19 @@ deployments, but the AMI and snapshots remain in AWS until removed manually
 (`aws ec2 deregister-image --delete-snapshots`). A reference handler (API Gateway + Lambda,
 from HashiCorp's Field CTO org) lives at https://github.com/danbarr/hcp-packer-webhook-aws.
 
+## Presenting the deck
+
+`presenterm/deck.md` is the slide deck (install: `brew install presenterm`).
+
+```sh
+make deck         # present; Ctrl+e executes the live demo blocks
+make deck-notes   # terminal 1 — same, but publishes speaker notes
+make notes        # terminal 2 — shows only the speaker notes, follows slide changes
+```
+
+The live blocks assume you run from a shell with `gh` authenticated and
+`AWS_PROFILE=personal` logged in (only the proof and cleanup slides touch AWS).
+
 ## Local runs
 
 ```sh

@@ -107,6 +107,8 @@ The treadmill
 
 Multiply their answers. That is the cost of the status quo.
 
+<!-- speaker_note: Ask - do not tell. Let the customer answer each question out loud and write the numbers down. Pause after each one. Never say the word treadmill - the audience assembles the metaphor from their own answers. These same numbers resurface on the Sell it slide, so capture them. -->
+
 <!-- end_slide -->
 
 <!-- jump_to_middle -->
@@ -348,7 +350,7 @@ The channel decides; HCP Terraform executes. The run resolves `production`
 at apply time, authenticates to AWS via dynamic credentials (OIDC role
 scoped to this workspace's runs) — no AMI IDs and no static keys anywhere.
 
-<!-- speaker_note: If the audience wants to see it live, gh workflow run deploy.yml triggers the run and the production environment approval appears in the Actions tab - about two minutes end to end. Terraform is one consumer of the channel - any API-capable tool can resolve it the same way. Left as a talk-through so demo time goes to the registry story instead of a progress bar. --> -->
+<!-- speaker_note: If the audience wants to see it live, gh workflow run deploy.yml triggers the run and the production environment approval appears in the Actions tab - about two minutes end to end. Terraform is one consumer of the channel - any API-capable tool can resolve it the same way. Left as a talk-through so demo time goes to the registry story instead of a progress bar. -->
 
 <!-- end_slide -->
 
@@ -357,15 +359,14 @@ Demo — proof
 
 ```bash +exec
 export AWS_PROFILE=personal
-[ -f terraform/main.tf ] || cd ..
-cd terraform
-curl -s "http://$(terraform output -raw public_ip)"
-aws ec2 describe-tags --filters "Name=resource-id,Values=$(aws ec2 describe-instances --filters Name=tag:Name,Values=golden-image-demo --query 'Reservations[0].Instances[0].InstanceId' --output text)" --query 'Tags[?Key==`image` || Key==`channel`].[Key,Value]' --output table
+IP=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=golden-image-demo" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+curl -s "http://$IP"; echo
+aws ec2 describe-tags --filters "Name=resource-id,Values=$(aws ec2 describe-instances --filters Name=tag:Name,Values=golden-image-demo Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)" --query 'Tags[?Key==`image` || Key==`channel`].[Key,Value]' --output table
 ```
 
 The page comes from the golden image; the tags prove which one.
 
-<!-- speaker_note: This instance was deployed by deploy.yml on an earlier run - the curl shows the baked page and the tags prove which image and channel. Today's promotion deploys the same way after the talk. -->
+<!-- speaker_note: This instance was deployed by the pipeline on an earlier round - the curl shows the baked page and the tags prove which image and channel. Today's promotion deploys the same way after the talk. -->
 
 <!-- end_slide -->
 
@@ -394,24 +395,24 @@ The requirements scoreboard
 <!-- column_layout: [1, 1, 1, 1] -->
 
 <!-- column: 0 -->
-**✅ 8 live today**
+**✅ 8 available**
 
-AWS AMI flow, AL2023, registry, Terraform, as-code, tracking, audit
+AWS AMI flow, AL2023, Terraform integration, Ansible, as-code, build orchestration, pre-deploy testing, version tracking
 
 <!-- column: 1 -->
-**🟢 11 native**
+**🟢 12 native**
 
-GCP, Azure, Docker, RHEL, Windows, API, Ansible, multi-cloud, pre-deploy test, global scale, hooks
+GCP, Azure, Docker, RHEL, Windows, repository mgmt, API-first, multi-cloud, notifications, global scale, audit, hooks
 
 <!-- column: 2 -->
-**🟡 9 via CI**
+**🟡 7 via CI**
 
-GUI, schedules, sec testing, notify, logs, discovery, dashboards, CIS, CVE scans
+GUI, schedules, security testing, logging, dashboards, CIS benchmark, CVE scans
 
 <!-- column: 3 -->
-**🟠 3 partial**
+**🟠 4 partial**
 
-Artifactory, import legacy, package diff
+Artifactory, import legacy, package diff, org-wide discovery
 
 <!-- reset_layout -->
 
@@ -458,10 +459,12 @@ Tear down the demo instance so the next run starts clean.
 ```bash +exec
 export AWS_PROFILE=personal
 [ -f terraform/main.tf ] || cd ..
-cd terraform && terraform destroy -auto-approve
+terraform -chdir=terraform destroy -auto-approve   # whatever TFC tracks
+IDS=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=golden-image-demo" "Name=instance-state-name,Values=pending,running,stopped" --query 'Reservations[].Instances[].InstanceId' --output text)
+[ -n "$IDS" ] && aws ec2 terminate-instances --instance-ids $IDS --query 'TerminatingInstances[].InstanceId' --output text || echo "no untracked instances"
 ```
 
-<!-- speaker_note: Run this after the demo. Skip it only if the audience wants to keep the instance for exploration. The registry versions and channels can stay - they are metadata, not cost. -->
+<!-- speaker_note: Run this after the demo. The destroy covers everything HCP Terraform tracks; the tag sweep catches instances from rounds that predate the TFC backend. Skip only if the audience wants to keep the instance for exploration. The registry versions and channels can stay - they are metadata, not cost. -->
 
 <!-- end_slide -->
 
