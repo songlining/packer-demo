@@ -21,6 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: hashicorp/setup-terraform@v3   # runners no longer ship terraform
+
       - name: Terraform apply
         run: |
           terraform -chdir=terraform init
