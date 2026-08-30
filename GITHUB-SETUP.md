@@ -36,16 +36,23 @@ Trust policy — replace `<account>` and `<org>/<repo>`:
 ```
 - Secret: `AWS_ROLE_ARN` = the role ARN
 
+Note: this OIDC role is only used by `build.yml` (Packer needs AWS credentials on
+the runner). `deploy.yml` does not use it — its Terraform runs remotely in HCP
+Terraform, which authenticates to AWS via its own dynamic-credentials role
+(`tfc-packer-demo`, see section 5).
+
 ## 4. Approval gate
-Repo → Settings → Environments → create `production` → Required reviewers = you.
-This is the pre-deployment gate that the deploy workflow waits on.
+Done (2026-08-30): `production` environment exists. Add **Required reviewers** in
+Repo → Settings → Environments → production (the API-created environment has no
+reviewers yet). This is the pre-deployment gate the deploy workflow waits on.
 
 ## 5. Terraform state for CI
-Local state lives on the laptop; CI applies need remote state. Pick one:
-- **S3 backend** (quick): create a versioned bucket + dynamodb lock table, add
-  `backend "s3" {}` to `terraform/main.tf`
-- **HCP Terraform** (better demo story — one platform end to end): create a project +
-  workspace, `cloud {}` block in main.tf, `TF_API_TOKEN` secret
+Done: state and runs live in **HCP Terraform** (org `lab-larry`, workspace
+`packer-demo`). `terraform/main.tf` carries the `cloud {}` block; local runs
+use your `terraform login` credentials, CI uses the `TFE_TOKEN` secret set in
+the `production` GitHub environment (the same token as `~/.terraform.d/credentials.tfrc.json`).
+With the cloud block, `terraform apply` executes remotely in HCP Terraform -
+GitHub Actions only triggers and reports the run.
 
 ## Demo flow
 1. Branch, edit the webapp (e.g. index.html line in the playbook), open PR → `validate` runs

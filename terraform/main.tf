@@ -1,5 +1,14 @@
 terraform {
   required_version = ">= 1.5.0"
+
+  cloud {
+    organization = "lab-larry"
+
+    workspaces {
+      name = "packer-demo"
+    }
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"

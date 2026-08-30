@@ -4,16 +4,26 @@ End-to-end golden-image pipeline: a GitHub PR builds AMIs with **Packer**, regis
 them in **HCP Packer**, and **Terraform** deploys instances pinned to a channel —
 no AMI IDs in code, no static cloud keys anywhere.
 
-```
-PR ──► validate.yml (packer/ansible/terraform checks)
- │
- merge ──► build.yml ──► Packer build (Trivy scan + Ansible inside)
- │                            │
- │                            ▼
- │                       HCP Packer registry (version + labels + lineage)
- │                            │  assign version to `production` channel
- ▼                            ▼
-deploy.yml ──► Terraform reads channel ──► EC2 instance tagged with image + channel
+```mermaid
+flowchart TD
+    PR[Pull Request] --> |checks green · then merge| validate[validate.yml\npacker · ansible · terraform]
+    validate --> build
+
+    subgraph runner["GitHub Actions runner (ubuntu-latest)"]
+        build[Packer build]
+        ansible[Ansible — nginx + app config]
+        trivy[Trivy scan — CVE gate]
+        build --> |invokes| ansible
+        ansible --> |SSH → applies config| ec2_build[EC2 build instance\ntemporary]
+        ansible --> trivy
+    end
+
+    trivy --> |pass| snapshot[snapshot → AMI]
+    trivy --> |fail: CVE found| blocked([build blocked\nnever registered])
+    snapshot --> hcp[HCP Packer Registry\nversion + labels]
+    hcp --> |human promotes to production channel| hcp
+    hcp --> |Terraform reads production channel| deploy[deploy.yml — Terraform apply]
+    deploy --> ec2[EC2 instance running]
 ```
 
 ## What's in here
@@ -31,8 +41,8 @@ terraform/
 .github/workflows/
   validate.yml         # PR gate: packer validate (per file), ansible syntax, terraform validate
   build.yml            # on merge to main: OIDC -> AWS, Packer build, publish to HCP Packer
-  deploy.yml           # manual dispatch, gated by the `production` GitHub environment
-GITHUB-SETUP.md        # one-time setup: repo, secrets, AWS OIDC role, environments, state backend
+  deploy.yml           # manual dispatch, gated by the `production` GitHub environment; apply runs remotely in HCP Terraform
+GITHUB-SETUP.md        # one-time setup: repo, secrets, AWS OIDC role, environments, TFC workspace
 ```
 
 ## Demo flow (the short version)
@@ -52,6 +62,45 @@ GITHUB-SETUP.md        # one-time setup: repo, secrets, AWS OIDC role, environme
 - **CI → HCP Packer**: service principal (`HCP_CLIENT_ID` / `HCP_CLIENT_SECRET` repo secrets).
   Packer publishes versions automatically via the `hcp_packer_registry` blocks; Terraform reads
   channels with the same principal. HCP's token endpoint is `auth.idp.hashicorp.com/oauth2/token`.
+- **CI → HCP Terraform**: state and runs live in workspace `lab-larry/packer-demo`. `deploy.yml`
+  authenticates with the `TFE_TOKEN` secret (production environment) and `terraform apply`
+  executes as a remote TFC run — it never touches state locally. The TFC run authenticates to
+  AWS with dynamic credentials (OIDC role `tfc-packer-demo`, trust scoped to the workspace's
+  run phases) — no static keys anywhere. Terraform is one consumer of HCP Packer metadata;
+  the same channel works from any API-capable tool.
+
+## Why the state lives in HCP Terraform
+
+- **CI applies need shared state.** The deploy runner is ephemeral — without remote state,
+  every run would see "no resources" and create a duplicate instance, and a later
+  `terraform destroy` would never know it existed.
+- **One truth.** Laptop and CI share one workspace, so the next run — whoever triggers it —
+  sees the same reality.
+- **Locking.** Concurrent deploys queue in TFC instead of racing on a local state file.
+- **Run history is the audit.** Every plan/apply records who triggered it, the diff, and the
+  outcome.
+- **Drift fails loudly.** Delete an AMI a channel still points at, and the next plan errors
+  instead of silently drifting.
+
+Division of labour: **HCP Packer remembers what images exist; HCP Terraform remembers what
+you deployed; AWS remembers what's running.**
+
+### Image lifecycle across the registry boundary
+
+Registry events drive proportionate AWS actions via HCP Packer webhooks — never less, never
+more:
+
+- **Version revoked** → webhook marks the AMI *deprecated* in AWS (EC2 deprecation API).
+  Running instances are unaffected, new launches wind down, and the action is reversible
+  ("restore" in the registry un-deprecates). Revocation is a safe panic button, so it must
+  not destroy anything.
+- **Version deleted** → webhook deregisters the AMI and deletes the EBS snapshots. Permanent,
+  by design — it fires only on the explicit delete event.
+
+Without the webhook handler, registry actions are paper-only: revocation stops new
+deployments, but the AMI and snapshots remain in AWS until removed manually
+(`aws ec2 deregister-image --delete-snapshots`). A reference handler (API Gateway + Lambda,
+from HashiCorp's Field CTO org) lives at https://github.com/danbarr/hcp-packer-webhook-aws.
 
 ## Local runs
 
