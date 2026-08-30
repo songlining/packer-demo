@@ -250,7 +250,7 @@ git checkout -b demo/update-index 2>/dev/null || git checkout demo/update-index
 sed -i '' "s|<h1>.*</h1>|<h1>webapp-a from a golden image ($(date +%H:%M))</h1>|" packer/playbooks/webapp.yml
 git commit -am "demo: update index page"
 git push -u origin demo/update-index
-gh pr view demo/update-index --json url -q .url 2>/dev/null || gh pr create --fill
+gh pr create --fill 2>/dev/null || echo "PR already open: $(gh pr list --head demo/update-index --state open --json url -q '.[0].url')"
 ```
 
 Nothing merges until the image definition is proven sound.
