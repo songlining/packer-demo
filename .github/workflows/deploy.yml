@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      TFE_TOKEN: ${{ secrets.TFE_TOKEN }} # HCP Terraform cloud backend auth
+      TF_TOKEN_app_terraform_io: ${{ secrets.TFE_TOKEN }} # HCP Terraform cloud backend auth
     steps:
       - uses: actions/checkout@v4
 
