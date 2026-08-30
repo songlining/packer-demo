@@ -16,6 +16,7 @@ jobs:
         run: |
           packer init .
           for f in *.pkr.hcl; do
+            [ "$f" = "plugins.pkr.hcl" ] && continue   # requirement-only file, no build block by design
             echo "::group::$f"
             packer validate "$f"
             echo "::endgroup::"
@@ -30,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3   # runners no longer ship terraform
 
       - name: Terraform validate
         run: |
