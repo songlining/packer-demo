@@ -155,6 +155,12 @@ resource "aws_iam_role_policy" "deploy" {
 }
 
 data "aws_iam_policy_document" "deploy" {
+  # CODEPIPELINE source: the job downloads its input artifact from the bucket itself
+  statement {
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+    resources = ["${aws_s3_bucket.artifacts.arn}/*"]
+  }
+
   statement {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = ["${local.secret_arn_prefix}-*"]
