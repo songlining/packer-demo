@@ -72,6 +72,34 @@ resource "aws_iam_role_policy" "validate" {
   policy = data.aws_iam_policy_document.logs.json
 }
 
+# CodeBuild validates connection access against the project role at
+# CreateProject time — UseConnection alone is not enough (aws/aws-cdk#38504).
+data "aws_iam_policy_document" "connection_access" {
+  statement {
+    actions = [
+      "codeconnections:UseConnection",
+      "codeconnections:GetConnection",
+      "codeconnections:GetConnectionToken",
+      "codestar-connections:UseConnection",
+      "codestar-connections:GetConnection",
+      "codestar-connections:GetConnectionToken",
+    ]
+    resources = [aws_codeconnections_connection.github.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "validate_conn" {
+  name   = "connection-access"
+  role   = aws_iam_role.validate.id
+  policy = data.aws_iam_policy_document.connection_access.json
+}
+
+resource "aws_iam_role_policy" "build_conn" {
+  name   = "connection-access"
+  role   = aws_iam_role.build.id
+  policy = data.aws_iam_policy_document.connection_access.json
+}
+
 # Packer needs EC2 to build AMIs (instances, key pairs, SGs, snapshots).
 # Demo-scoped like the old packer-demo-github OIDC role (PowerUser), plus the
 # two CI-only extras: read the HCP/TFE secret, cascade-dispatch the build project.
@@ -180,7 +208,7 @@ resource "aws_codebuild_webhook" "validate" {
 
     filter {
       type    = "FILE_PATH"
-      pattern = "packer/**, terraform/**"
+      pattern = "packer/.*|terraform/.*" # regex, not glob
     }
   }
 }
@@ -229,7 +257,7 @@ resource "aws_codebuild_webhook" "build" {
 
     filter {
       type    = "FILE_PATH"
-      pattern = "packer/**"
+      pattern = "packer/.*" # regex, not glob
     }
   }
 }

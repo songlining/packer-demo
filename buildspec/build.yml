@@ -27,6 +27,7 @@ phases:
     commands:
       - curl -fsSL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip" -o /tmp/packer.zip
       - unzip -qo /tmp/packer.zip -d /usr/local/bin
+      - pip3 install --quiet ansible-core   # GH runners ship it; CodeBuild images don't
 
   pre_build:
     commands:
@@ -53,8 +54,9 @@ phases:
 
   post_build:
     commands:
+      # post_build runs even after a failed build (unlike Actions) — cascade only on success
       - |
-        if [ "$T" = "base-os.pkr.hcl" ]; then
+        if [ "$T" = "base-os.pkr.hcl" ] && [ "$CODEBUILD_BUILD_SUCCEEDING" = "1" ]; then
           TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" \
