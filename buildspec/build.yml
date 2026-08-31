@@ -70,9 +70,5 @@ phases:
             "$BASE/channels/production" | head -c 200; echo
           echo "cascading: dispatching webapp build"
           # --cli-input-json: the standard:7.0 image's awscli lacks --source-version-override
-          aws codebuild start-build --cli-input-json "{\n
-            \"projectName\": \"$CASCADE_PROJECT\",\n
-            \"sourceVersion\": \"$CODEBUILD_RESOLVED_SOURCE_VERSION\",\n
-            \"environmentVariablesOverride\": [{\"name\":\"TEMPLATE\",\"value\":\"webapp.pkr.hcl\"}]\n
-          }" >/dev/null
+          aws codebuild start-build --cli-input-json "{\"projectName\":\"$CASCADE_PROJECT\",\"sourceVersion\":\"$CODEBUILD_RESOLVED_SOURCE_VERSION\",\"environmentVariablesOverride\":[{\"name\":\"TEMPLATE\",\"value\":\"webapp.pkr.hcl\"}]}" >/dev/null
         fi
