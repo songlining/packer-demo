@@ -39,6 +39,6 @@ build {
   # requires ansible-playbook on the build host (brew install ansible)
   provisioner "ansible" {
     playbook_file   = "${path.root}/playbooks/webapp.yml"
-    extra_arguments = ["--extra-vars", "ansible_python_interpreter=/usr/bin/python3"]
+    extra_arguments = ["--extra-vars", "ansible_python_interpreter=/usr/bin/python3 ansible_remote_tmp=/tmp/ansible"]
   }
 }

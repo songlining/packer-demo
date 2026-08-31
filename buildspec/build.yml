@@ -27,7 +27,7 @@ phases:
     commands:
       - curl -fsSL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip" -o /tmp/packer.zip
       - unzip -qo /tmp/packer.zip -d /usr/local/bin
-      - pip3 install --quiet ansible-core   # GH runners ship it; CodeBuild images don't
+      - pip3 install --quiet "ansible-core<2.19"   # GH runners ship it; CodeBuild doesn't. 2.19 breaks tmp-dir under packer's ansible proxy
 
   pre_build:
     commands:
