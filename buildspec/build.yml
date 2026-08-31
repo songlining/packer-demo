@@ -69,7 +69,10 @@ phases:
             -d "{\"version_fingerprint\":\"$FP\",\"update_mask\":\"versionFingerprint\"}" \
             "$BASE/channels/production" | head -c 200; echo
           echo "cascading: dispatching webapp build"
-          aws codebuild start-build --project-name "$CASCADE_PROJECT" \
-            --source-version-override "$CODEBUILD_RESOLVED_SOURCE_VERSION" \
-            --environment-variables-override name=TEMPLATE,value=webapp.pkr.hcl >/dev/null
+          # --cli-input-json: the standard:7.0 image's awscli lacks --source-version-override
+          aws codebuild start-build --cli-input-json "{\n
+            \"projectName\": \"$CASCADE_PROJECT\",\n
+            \"sourceVersion\": \"$CODEBUILD_RESOLVED_SOURCE_VERSION\",\n
+            \"environmentVariablesOverride\": [{\"name\":\"TEMPLATE\",\"value\":\"webapp.pkr.hcl\"}]\n
+          }" >/dev/null
         fi
