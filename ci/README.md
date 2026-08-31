@@ -44,10 +44,24 @@ pipeline start working immediately after; nothing else to redo.
 | `production` GitHub environment approval | **Approve stage in the pipeline** — every push to `main` parks there; assign the HCP channel, then approve |
 | deploy triggered manually | pipeline auto-parks at Approve on push (no path filter in pipeline sources); approving on a no-change push is a no-op apply |
 
-## 5. Cutover
+## 5. Running both pipelines in parallel
 
-Delete `.github/workflows/` on `main` (or `gh workflow disable validate build deploy`
-first) — otherwise every merge builds twice, once per system.
+Both CI systems stay active on the same repo and watch the same events:
+
+- A PR touching `packer/**` or `terraform/**` runs **two** validators (Actions `validate`,
+  CodeBuild `packer-demo-validate`) — both report status on the PR.
+- A merge to `main` touching `packer/**` fires **two** builds — two AMIs, two HCP Packer
+  versions of the same commit. Promote whichever; they're identical.
+- Demo tip: to run exactly one pipeline on demand, dispatch it instead of pushing:
+
+```sh
+gh workflow run build.yml -f template=webapp.pkr.hcl                    # GitHub Actions
+aws codebuild start-build --project-name packer-demo-build \\
+  --environment-variables-override name=TEMPLATE,value=webapp.pkr.hcl   # CodeBuild
+```
+
+Retire one side when you're done comparing: `gh workflow disable validate build deploy`
+for Actions, or `aws codebuild delete-webhook --project-name <name>` per project for CodeBuild.
 
 ## 6. Cleanup
 

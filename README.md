@@ -1,10 +1,11 @@
 # packer-demo
 
-End-to-end golden-image pipeline: a GitHub PR kicks off **AWS CodeBuild**, which
-builds AMIs with **Packer**, registers them in **HCP Packer**, and **Terraform**
-(via a **CodePipeline** approval gate) deploys instances pinned to a channel —
-no AMI IDs in code, no static cloud keys anywhere. Source stays in GitHub; the
-CodeBuild projects pull from the same repo through a CodeConnections GitHub App.
+End-to-end golden-image pipeline, running on **both** AWS CodeBuild/CodePipeline and
+GitHub Actions in parallel: a GitHub PR kicks off **both** validators; a merge fires
+**both** builders, which build AMIs with **Packer**, register them in **HCP Packer**, and
+**Terraform** (via a **CodePipeline** approval gate) deploys instances pinned to a channel —
+no AMI IDs in code, no static cloud keys anywhere. Source stays in GitHub; the CodeBuild
+projects pull from the same repo through a CodeConnections GitHub App.
 
 ```mermaid
 flowchart TD
@@ -44,9 +45,9 @@ buildspec/
   validate.yml         # PR gate: packer validate (per file), ansible syntax, terraform validate
   build.yml            # on merge to main: Packer build, publish to HCP Packer, pin + cascade
   deploy.yml           # pipeline Deploy stage: triggers the remote apply in HCP Terraform
-ci/                    # CI stack: GitHub connection, CodeBuild projects + webhooks, pipeline, roles
-ci/README.md           # one-time setup: one secret, terraform apply, GitHub App click
-.github/workflows/     # legacy Actions pipelines — delete at cutover (see ci/README.md §5)
+ci/                    # CodeBuild/CodePipeline CI stack: GitHub connection, projects + webhooks, pipeline, roles
+ci/README.md           # one-time setup + running both pipelines in parallel
+.github/workflows/     # GitHub Actions pipelines — same flow, alternative runner
 ```
 
 ## Demo flow (the short version)
