@@ -1,0 +1,24 @@
+# Deploy — CodeBuild twin of the old .github/workflows/deploy.yml, invoked by
+# the packer-demo-deploy pipeline after the manual approval stage.
+#
+# Terraform still runs remotely in HCP Terraform (workspace lab-larry/packer-demo);
+# AWS auth happens there via dynamic credentials (OIDC). This job only needs
+# TFE_TOKEN to trigger and report the run.
+version: 0.2
+
+env:
+  variables:
+    TERRAFORM_VERSION: "1.15.8"
+  secrets-manager:
+    TF_TOKEN_app_terraform_io: "packer-demo/ci:TFE_TOKEN"   # terraform login token for the cloud backend
+
+phases:
+  install:
+    commands:
+      - curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o /tmp/tf.zip
+      - unzip -qo /tmp/tf.zip -d /usr/local/bin
+
+  build:
+    commands:
+      - terraform -chdir=terraform init
+      - terraform -chdir=terraform apply -auto-approve

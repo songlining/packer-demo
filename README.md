@@ -1,15 +1,17 @@
 # packer-demo
 
-End-to-end golden-image pipeline: a GitHub PR builds AMIs with **Packer**, registers
-them in **HCP Packer**, and **Terraform** deploys instances pinned to a channel —
-no AMI IDs in code, no static cloud keys anywhere.
+End-to-end golden-image pipeline: a GitHub PR kicks off **AWS CodeBuild**, which
+builds AMIs with **Packer**, registers them in **HCP Packer**, and **Terraform**
+(via a **CodePipeline** approval gate) deploys instances pinned to a channel —
+no AMI IDs in code, no static cloud keys anywhere. Source stays in GitHub; the
+CodeBuild projects pull from the same repo through a CodeConnections GitHub App.
 
 ```mermaid
 flowchart TD
-    PR[Pull Request] --> |checks green · then merge| validate[validate.yml\npacker · ansible · terraform]
+    PR[Pull Request] --> |checks green · then merge| validate[CodeBuild validate\npacker · ansible · terraform]
     validate --> build
 
-    subgraph runner["GitHub Actions runner (ubuntu-latest)"]
+    subgraph runner["CodeBuild managed runner"]
         build[Packer build]
         ansible[Ansible — nginx + app config]
         trivy[Trivy scan — CVE gate]
@@ -22,7 +24,7 @@ flowchart TD
     trivy --> |fail: CVE found| blocked([build blocked\nnever registered])
     snapshot --> hcp[HCP Packer Registry\nversion + labels]
     hcp --> |human promotes to production channel| hcp
-    hcp --> |Terraform reads production channel| deploy[deploy.yml — Terraform apply]
+    hcp --> |Terraform reads production channel| deploy[CodePipeline — Approve stage → terraform apply]
     deploy --> ec2[EC2 instance running]
 ```
 
@@ -38,11 +40,13 @@ packer/
   plugins.pkr.hcl      # single source of plugin requirements
 terraform/
   main.tf              # resolves the `production` channel -> launches EC2
-.github/workflows/
+buildspec/
   validate.yml         # PR gate: packer validate (per file), ansible syntax, terraform validate
-  build.yml            # on merge to main: OIDC -> AWS, Packer build, publish to HCP Packer
-  deploy.yml           # manual dispatch, gated by the `production` GitHub environment; apply runs remotely in HCP Terraform
-GITHUB-SETUP.md        # one-time setup: repo, secrets, AWS OIDC role, environments, TFC workspace
+  build.yml            # on merge to main: Packer build, publish to HCP Packer, pin + cascade
+  deploy.yml           # pipeline Deploy stage: triggers the remote apply in HCP Terraform
+ci/                    # CI stack: GitHub connection, CodeBuild projects + webhooks, pipeline, roles
+ci/README.md           # one-time setup: one secret, terraform apply, GitHub App click
+.github/workflows/     # legacy Actions pipelines — delete at cutover (see ci/README.md §5)
 ```
 
 ## Demo flow (the short version)
@@ -50,24 +54,28 @@ GITHUB-SETUP.md        # one-time setup: repo, secrets, AWS OIDC role, environme
 1. Branch, edit `packer/playbooks/webapp.yml` (e.g. the index page), open a PR → `validate` goes green
 2. Merge → `build` runs → new version appears in HCP Packer with labels and lineage back to `base-os`
 3. Assign the version to the `production` channel (HCP Packer UI, one click)
-4. Run `deploy` → approve the `production` environment → instance runs the new image
+4. Approve the pipeline's **Approve** stage → instance running the new image
 5. Bonus: set Trivy `--exit-code` to `1`, PR a vulnerable package → build goes red, image never reaches the channel
 
 ## Auth model
 
-- **GitHub → AWS**: OIDC. The workflow requests a JWT from `token.actions.githubusercontent.com`,
-  exchanges it at STS for temporary credentials for role `packer-demo-github`. Trust policy is
-  scoped to this repo (`repo:*/packer-demo@<repo-id>:ref:refs/heads/main`) — note GitHub's newer
-  `sub` claim format includes actor and repo IDs.
-- **CI → HCP Packer**: service principal (`HCP_CLIENT_ID` / `HCP_CLIENT_SECRET` repo secrets).
+- **CodeBuild → AWS**: the build job's IAM role (`packer-demo-codebuild-build`) is
+  attached to the project directly — the runner lives inside AWS, so the OIDC
+  exchange GitHub Actions needed is gone. EC2 (demo scope), read on one Secrets
+  Manager secret (`packer-demo/ci`), and `codebuild:StartBuild` on itself for the
+  base-os → webapp cascade.
+- **CI → HCP Packer**: service principal (`HCP_CLIENT_ID` / `HCP_CLIENT_SECRET`,
+  keys of secret `packer-demo/ci`).
   Packer publishes versions automatically via the `hcp_packer_registry` blocks; Terraform reads
   channels with the same principal. HCP's token endpoint is `auth.idp.hashicorp.com/oauth2/token`.
-- **CI → HCP Terraform**: state and runs live in workspace `lab-larry/packer-demo`. `deploy.yml`
-  authenticates with the `TFE_TOKEN` secret (production environment) and `terraform apply`
+- **CI → HCP Terraform**: state and runs live in workspace `lab-larry/packer-demo`. The
+  deploy job authenticates with the `TFE_TOKEN` key of secret `packer-demo/ci` and `terraform apply`
   executes as a remote TFC run — it never touches state locally. The TFC run authenticates to
   AWS with dynamic credentials (OIDC role `tfc-packer-demo`, trust scoped to the workspace's
   run phases) — no static keys anywhere. Terraform is one consumer of HCP Packer metadata;
   the same channel works from any API-capable tool.
+- The CI stack itself (projects, webhooks, pipeline, roles) is Terraform in `ci/`,
+  applied once — setup in `ci/README.md`.
 
 ## Why the state lives in HCP Terraform
 

@@ -1,0 +1,27 @@
+# PR gate — CodeBuild twin of the old .github/workflows/validate.yml.
+# Triggered by the packer-demo-validate project webhook on PR events
+# (packer/**, terraform/**). Nothing merges until these pass.
+version: 0.2
+
+env:
+  variables:
+    PACKER_VERSION: "1.15.4"
+    TERRAFORM_VERSION: "1.15.8"
+
+phases:
+  install:
+    commands:
+      - curl -fsSL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip" -o /tmp/packer.zip
+      - unzip -qo /tmp/packer.zip -d /usr/local/bin
+      - curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o /tmp/tf.zip
+      - unzip -qo /tmp/tf.zip -d /usr/local/bin
+      - pip3 install --quiet ansible-core
+
+  build:
+    commands:
+      - cd packer && packer init .
+      - for f in *.pkr.hcl; do [ "$f" = "plugins.pkr.hcl" ] && continue; echo "== $f"; packer validate "$f"; done   # per-file; dir validate hits duplicate patch_level
+      - cd ..
+      - ansible-playbook --syntax-check packer/playbooks/webapp.yml
+      - terraform -chdir=terraform init -backend=false
+      - terraform -chdir=terraform validate
