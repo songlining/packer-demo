@@ -8,7 +8,7 @@
 
     - name: Deploy index page
       ansible.builtin.copy:
-        content: "<h1>webapp-a from a golden image (21:32)</h1>\n"
+        content: "<h1>webapp-a from a golden image (parallel CI)</h1>\n"
         dest: /usr/share/nginx/html/index.html
 
     - name: Enable and start nginx

@@ -1,0 +1,74 @@
+# Build on merge — CodeBuild twin of the old .github/workflows/build.yml.
+# "Everything starts from a PR" (#13/#17/#18): Packer builds the image, HCP
+# Packer records the version with labels + lineage.
+#
+# Cascade: a base-os build re-pins the base-os/production channel via the HCP
+# API, then start-builds this same project with TEMPLATE=webapp.pkr.hcl so the
+# downstream image picks up the new parent. webapp-a promotion stays a human
+# step — assign it in the HCP UI (one click), then approve the pipeline stage.
+#
+# Manual dispatch (workflow_dispatch equivalent):
+#   aws codebuild start-build --project-name packer-demo-build \
+#     --environment-variables-override name=TEMPLATE,value=base-os.pkr.hcl
+version: 0.2
+
+env:
+  variables:
+    PACKER_VERSION: "1.15.4"
+    TEMPLATE: ""                # empty on webhook builds -> infer from the merge commit
+    PATCH_LEVEL: ""
+    CASCADE_PROJECT: "packer-demo-build"
+  secrets-manager:
+    HCP_CLIENT_ID: "packer-demo/ci:HCP_CLIENT_ID"
+    HCP_CLIENT_SECRET: "packer-demo/ci:HCP_CLIENT_SECRET"
+
+phases:
+  install:
+    commands:
+      - curl -fsSL "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PACKER_VERSION}_linux_amd64.zip" -o /tmp/packer.zip
+      - unzip -qo /tmp/packer.zip -d /usr/local/bin
+      - pip3 install --quiet "ansible-core<2.19"   # GH runners ship it; CodeBuild doesn't. 2.19 breaks tmp-dir under packer's ansible proxy
+
+  pre_build:
+    commands:
+      - |
+        if [ -n "$TEMPLATE" ]; then
+          T="$TEMPLATE"
+        elif git diff --name-only HEAD~1 | grep -q base-os.pkr.hcl; then
+          T="base-os.pkr.hcl"   # base-os merge -> patch + cascade
+        else
+          T="webapp.pkr.hcl"
+        fi
+        echo "template=$T"
+
+  build:
+    commands:
+      - cd packer && packer init .
+      - |
+        if [ "$T" = "base-os.pkr.hcl" ]; then
+          PL="${PATCH_LEVEL:-$(date +%Y-%m)}"
+          packer build -var "patch_level=$PL" base-os.pkr.hcl
+        else
+          packer build "$T"
+        fi
+
+  post_build:
+    commands:
+      # post_build runs even after a failed build (unlike Actions) — cascade only on success
+      - |
+        if [ "$T" = "base-os.pkr.hcl" ] && [ "$CODEBUILD_BUILD_SUCCEEDING" = "1" ]; then
+          TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+          BASE="https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/base-os"
+          FP=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/versions" \
+            | python3 -c "import json,sys; vs=json.load(sys.stdin)['versions']; vs.sort(key=lambda v: v['created_at'], reverse=True); print(vs[0]['fingerprint'])")
+          echo "pinning base-os/production -> $FP"
+          curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"version_fingerprint\":\"$FP\",\"update_mask\":\"versionFingerprint\"}" \
+            "$BASE/channels/production" | head -c 200; echo
+          echo "cascading: dispatching webapp build"
+          # --cli-input-json: the standard:7.0 image's awscli lacks --source-version-override
+          aws codebuild start-build --cli-input-json "{\"projectName\":\"$CASCADE_PROJECT\",\"sourceVersion\":\"$CODEBUILD_RESOLVED_SOURCE_VERSION\",\"environmentVariablesOverride\":[{\"name\":\"TEMPLATE\",\"value\":\"webapp.pkr.hcl\"}]}" >/dev/null
+        fi
