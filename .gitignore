@@ -16,3 +16,4 @@ packer/packer_manifest.json
 .DS_Store
 *.retry
 *.log
+ci/STATE.md
