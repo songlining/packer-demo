@@ -2,6 +2,7 @@ terraform {
   required_version = ">= 1.5.0"
 
   cloud {
+    # ponytail: HCP Terraform does not allow variables in the cloud block — edit this to your org (see GITHUB-SETUP.md step 5)
     organization = "lab-larry"
 
     workspaces {
@@ -21,8 +22,13 @@ terraform {
   }
 }
 
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+
 provider "aws" {
-  region = "ap-southeast-2"
+  region = var.aws_region
 }
 
 # Resolves the webapp image from the production channel — no AMI IDs anywhere.
@@ -31,7 +37,7 @@ data "hcp_packer_artifact" "webapp" {
   bucket_name  = "webapp-a"
   channel_name = "production"
   platform     = "aws"
-  region       = "ap-southeast-2"
+  region       = var.aws_region
 }
 
 resource "aws_security_group" "web" {

@@ -1,3 +1,8 @@
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+
 hcp_packer_registry {
   bucket_name   = "webapp-a"
   description   = "App image layered on the base-os channel parent — one package, full lineage"
@@ -10,11 +15,11 @@ data "hcp-packer-artifact" "base" {
   bucket_name  = "base-os"
   channel_name = "production"
   platform     = "aws"
-  region       = "ap-southeast-2"
+  region       = var.aws_region
 }
 
 source "amazon-ebs" "webapp" {
-  region        = "ap-southeast-2"
+  region        = var.aws_region
   instance_type = "t3.micro"
   ami_name      = "webapp-a-{{timestamp}}"
   ssh_username  = "ec2-user"

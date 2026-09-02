@@ -49,6 +49,25 @@ ci/README.md           # one-time setup + running both pipelines in parallel
 .github/workflows/     # GitHub Actions pipelines — same flow, alternative runner
 ```
 
+## Configuration — nothing environment-specific is hardcoded
+
+Every user-specific value is a knob. Secrets go in secrets; the rest are variables.
+Full setup walkthrough: [GITHUB-SETUP.md](GITHUB-SETUP.md) (step 0 is the checklist).
+
+| Knob | Where it's read | Default |
+|---|---|---|
+| `HCP_ORG_ID`, `HCP_PROJECT_ID` | GitHub repo **variables** (Actions `build.yml`); CodeBuild env on `packer-demo-build` | — required, no default |
+| `HCP_CLIENT_ID`, `HCP_CLIENT_SECRET` | GitHub repo **secrets** (Actions); Secrets Manager secret `packer-demo/ci` (CodeBuild) | — required |
+| `AWS_ROLE_ARN` (Actions) / `TFE_TOKEN` (both) | GitHub repo **secrets** / `TFE_TOKEN` key of `packer-demo/ci` | — required |
+| `AWS_REGION` | GitHub repo **variable** (Actions build) | `us-east-1` |
+| `aws_region` | Packer `-var`, Terraform variable (both stacks) | `us-east-1` |
+| `github_repo` | `cd ci && terraform apply -var github_repo=<owner>/<name>` | — required |
+| HCP Terraform org | `cloud { organization }` in `terraform/main.tf` **and** `ci/main.tf` — edit it; Terraform forbids variables there | — edit |
+| region for manual `aws`/`hcp` commands | pass `--region <region>` / `--profile <profile>` | — |
+
+Bucket names `base-os` / `webapp-a` and project names `packer-demo-*` are conventions
+of the demo, not account identifiers — safe to leave as-is.
+
 ## Demo flow (the short version)
 
 1. Branch, edit `packer/playbooks/webapp.yml` (e.g. the index page), open a PR → `validate` goes green
@@ -74,26 +93,26 @@ AMI build instance is throwaway — Packer creates it, configures it, snapshots 
 and terminates it, so the only long-running EC2 instance is the *deployed* demo box.
 
 Console: **CodeBuild → Build projects → `packer-demo-build` → Build history**
-https://ap-southeast-2.console.aws.amazon.com/codesuite/codebuild/projects/packer-demo-build/history
+https://<region>.console.aws.amazon.com/codesuite/codebuild/projects/packer-demo-build/history
 
 CLI:
 
 ```sh
 # status of the last 3 image builds
-aws --profile personal codebuild list-builds-for-project \
-  --region ap-southeast-2 --project-name packer-demo-build \
+aws --profile <profile> codebuild list-builds-for-project \
+  --region <region> --project-name packer-demo-build \
   --sort-order DESCENDING --max-items 3 --query 'ids' --output text
 
 # detail of the latest build (phases, status, commit, log group)
 # note: list-builds output has a trailing newline — tr -d '\n' before reusing the ID
-aws --profile personal codebuild batch-get-builds --region ap-southeast-2 \
-  --ids "$(aws --profile personal codebuild list-builds-for-project --region ap-southeast-2 \
+aws --profile <profile> codebuild batch-get-builds --region <region> \
+  --ids "$(aws --profile <profile> codebuild list-builds-for-project --region <region> \
     --project-name packer-demo-build --sort-order DESCENDING --max-items 1 \
     --query 'ids[0]' --output text | tr -d '\n')" \
   --query 'builds[0].[buildNumber,currentPhase,buildStatus,sourceVersion,logsGroupName]' --output text
 
 # pipeline state (Source → Approve → Deploy)
-aws --profile personal codepipeline get-pipeline-state --region ap-southeast-2 \
+aws --profile <profile> codepipeline get-pipeline-state --region <region> \
   --name packer-demo-deploy --query 'stageStates[].{stage:stageName,status:latestExecution.status}' --output table
 ```
 
@@ -114,7 +133,7 @@ More ops notes (HCP API quirks, cleanup runbook, gotchas): `ci/NOTES.md`.
   keys of secret `packer-demo/ci`).
   Packer publishes versions automatically via the `hcp_packer_registry` blocks; Terraform reads
   channels with the same principal. HCP's token endpoint is `auth.idp.hashicorp.com/oauth2/token`.
-- **CI → HCP Terraform**: state and runs live in workspace `lab-larry/packer-demo`. The
+- **CI → HCP Terraform**: state and runs live in workspace `<your-hcptf-org>/packer-demo`. The
   deploy job authenticates with the `TFE_TOKEN` key of secret `packer-demo/ci` and `terraform apply`
   executes as a remote TFC run — it never touches state locally. The TFC run authenticates to
   AWS with dynamic credentials (OIDC role `tfc-packer-demo`, trust scoped to the workspace's
@@ -167,15 +186,15 @@ make notes        # terminal 2 — shows only the speaker notes, follows slide c
 ```
 
 The live blocks assume you run from a shell with `gh` authenticated and
-`AWS_PROFILE=personal` logged in (only the proof and cleanup slides touch AWS).
+your AWS profile logged in (only the proof and cleanup slides touch AWS).
 
 ## Local runs
 
 ```sh
 cd packer && packer init . && packer validate webapp.pkr.hcl   # per-file; dir mode conflicts on purpose
-packer build base-os.pkr.hcl   # first run only (~4 min), then assign to `production` channel
+packer build -var aws_region=<region> base-os.pkr.hcl   # first run only (~4 min), then assign to `production` channel
 packer build webapp.pkr.hcl    # ~6 min
-cd ../terraform && terraform apply
+cd ../terraform && terraform apply    # -var aws_region=<region> if not us-east-1
 ```
 
 AWS profile must point at the same account CI builds into, or the channel will
@@ -186,6 +205,6 @@ reference AMIs that don't exist locally.
 - **Demo instance**: destroy via the `packer-demo` TFC workspace (`terraform destroy`
   from anywhere — state is remote), or the API runbook in `ci/NOTES.md`.
 - **CI stack** (projects, webhooks, pipeline, roles): `cd ci && terraform destroy`, then
-  `aws secretsmanager delete-secret --region ap-southeast-2 --secret-id packer-demo/ci`.
+  `aws secretsmanager delete-secret --region <region> --secret-id packer-demo/ci`.
 - Everything else is registry metadata (HCP Packer versions, AMIs, EBS snapshots) —
   deregister/delete manually; the runbook is in `ci/NOTES.md`.

@@ -54,7 +54,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ap-southeast-2
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Packer build
         working-directory: packer
@@ -72,12 +72,14 @@ jobs:
         if: steps.pick.outputs.template == 'base-os.pkr.hcl'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HCP_ORG_ID: ${{ vars.HCP_ORG_ID }}
+          HCP_PROJECT_ID: ${{ vars.HCP_PROJECT_ID }}
         run: |
           TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token \
             -H "Content-Type: application/x-www-form-urlencoded" \
             -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" \
             | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
-          BASE="https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/base-os"
+          BASE="https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/$HCP_ORG_ID/projects/$HCP_PROJECT_ID/buckets/base-os"
           FP=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/versions" \
             | python3 -c "
           import json,sys

@@ -3,6 +3,11 @@ variable "patch_level" {
   default = "2026-08"
 }
 
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+
 hcp_packer_registry {
   bucket_name   = "base-os"
   description   = "Bare-minimal Amazon Linux 2023 base image — value is the metadata chain, not the bytes"
@@ -11,7 +16,7 @@ hcp_packer_registry {
 }
 
 source "amazon-ebs" "base" {
-  region        = "ap-southeast-2"
+  region        = var.aws_region
   instance_type = "t3.micro"
   ami_name      = "base-os-{{timestamp}}"
   ssh_username  = "ec2-user"

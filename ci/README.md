@@ -1,13 +1,17 @@
 # CI stack setup — one-time, ~15 minutes
 
 CodeBuild + CodePipeline replace GitHub Actions. Source stays in GitHub — the
-projects pull from `songlining/packer-demo` via a CodeConnections GitHub App,
+projects pull from your repo (pass `-var github_repo=<owner>/<name>` when applying)
+via a CodeConnections GitHub App,
 `buildspec/*.yml` are the pipelines and live in the repo like `.github/workflows/` did.
+
+Also set `HCP_ORG_ID` / `HCP_PROJECT_ID` env vars on the `packer-demo-build` project
+after creating it — `buildspec/build.yml` has placeholders.
 
 ## 1. One Secrets Manager secret (all three CI credentials, JSON)
 
 ```sh
-aws secretsmanager create-secret --region ap-southeast-2 --name packer-demo/ci \
+aws secretsmanager create-secret --region <region> --name packer-demo/ci \
   --secret-string '{
     "HCP_CLIENT_ID":     "<same service principal as before>",
     "HCP_CLIENT_SECRET": "<...>",
@@ -20,10 +24,10 @@ Not managed by Terraform on purpose — no static keys in state.
 ## 2. Apply
 
 ```sh
-cd ci && terraform init && terraform apply
+cd ci && terraform init && terraform apply -var github_repo=<owner>/packer-demo
 ```
 
-State lands in HCP Terraform workspace `lab-larry/packer-demo-ci` (separate from
+State lands in HCP Terraform workspace `<your-hcptf-org>/packer-demo-ci` (separate from
 the app workspace `packer-demo` — CI shouldn't re-concile on every deploy run).
 
 ## 3. Authorize the GitHub App (one console click)
@@ -67,7 +71,7 @@ for Actions, or `aws codebuild delete-webhook --project-name <name>` per project
 
 ```sh
 cd ci && terraform destroy
-aws secretsmanager delete-secret --region ap-southeast-2 --secret-id packer-demo/ci
+aws secretsmanager delete-secret --region <region> --secret-id packer-demo/ci
 ```
 
 The artifact bucket has `force_destroy = true`, so destroy just works.

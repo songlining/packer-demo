@@ -1,5 +1,16 @@
 # GitHub setup — one-time, ~20 minutes
 
+## 0. Make it yours — knobs this repo reads (defaults in parentheses)
+
+- **GitHub repo *variables*** (Settings → Secrets and variables → Actions → Variables):
+  `HCP_ORG_ID`, `HCP_PROJECT_ID` — your HCP Packer org/project UUIDs (no default, build.yml needs them);
+  `AWS_REGION` (us-east-1)
+- **GitHub repo *secrets***: `HCP_CLIENT_ID`, `HCP_CLIENT_SECRET`, `AWS_ROLE_ARN`, `TFE_TOKEN` (see steps below)
+- **CodeBuild**: set `HCP_ORG_ID` / `HCP_PROJECT_ID` env vars on the `packer-demo-build` project (buildspec has placeholders)
+- **HCP Terraform**: edit the `cloud { organization }` block in `terraform/main.tf` **and** `ci/main.tf` — Terraform forbids variables there
+- **Region**: Packer and Terraform default to `us-east-1`; override with `-var aws_region=...` / a `terraform.tfvars`
+- **CI stack**: `cd ci && terraform apply -var github_repo=<owner>/packer-demo`
+
 ## 1. Repo
 ```sh
 git init && git add -A && git commit -m "packer demo: packer + hcp packer + terraform + gitops"
@@ -7,7 +18,7 @@ gh repo create packer-demo --private --source=. --push
 ```
 
 ## 2. HCP service principal → repo secrets
-Reuse the same service principal the laptop uses (or make a CI-only one, cleaner story).
+Create a CI-only service principal (cleanest story; reuse an existing one if you must).
 - Secrets: `HCP_CLIENT_ID`, `HCP_CLIENT_SECRET`
 - Principal needs **Contributor** on the HCP Packer registry project
 
@@ -47,7 +58,8 @@ Repo → Settings → Environments → production (the API-created environment h
 reviewers yet). This is the pre-deployment gate the deploy workflow waits on.
 
 ## 5. Terraform state for CI
-Done: state and runs live in **HCP Terraform** (org `lab-larry`, workspace
+State and runs live in **HCP Terraform** — set your org in the `cloud {}` block of
+`terraform/main.tf` (workspace
 `packer-demo`). `terraform/main.tf` carries the `cloud {}` block; local runs
 use your `terraform login` credentials, CI uses the `TFE_TOKEN` secret set in
 the `production` GitHub environment (the same token as `~/.terraform.d/credentials.tfrc.json`).

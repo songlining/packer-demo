@@ -2,7 +2,7 @@
 # channel in the HCP Packer UI (one click, demos the registry GUI), then runs
 # this. The `production` GitHub environment is the approval gate (#22).
 #
-# Terraform runs remotely in HCP Terraform (workspace lab-larry/packer-demo).
+# Terraform runs remotely in HCP Terraform (workspace <your-hcptf-org>/packer-demo).
 # AWS auth happens there via dynamic credentials (OIDC) — this workflow only
 # needs TFE_TOKEN to trigger and report the run.
 name: deploy

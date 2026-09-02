@@ -10,8 +10,13 @@ variable "alpine_patch_level" {
   default = "2026-08"
 }
 
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+
 source "amazon-ebssurrogate" "scratch" {
-  region        = "ap-southeast-2"
+  region        = var.aws_region
   instance_type = "t3.micro"
   ami_name      = "from-scratch-{{timestamp}}"
   ssh_username  = "ubuntu"

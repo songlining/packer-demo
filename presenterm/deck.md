@@ -15,7 +15,7 @@ Packer + HCP Packer + Terraform — a partner walkthrough
 
 <!-- new_lines: 4 -->
 
-*Larry Song — HashiCorp Solutions Engineering*
+*<Your Name> — HashiCorp Solutions Engineering*
 
 <!-- end_slide -->
 
@@ -23,10 +23,12 @@ Prep — is everything ready?
 ===========================
 
 ```bash +exec
-export AWS_PROFILE=personal
 [ -f Makefile ] || cd ..
+export AWS_PROFILE="${AWS_PROFILE:-default}"
+echo "== env: set HCP_ORG_ID / HCP_PROJECT_ID (your HCP Packer org + project UUIDs)"
+[ -n "$HCP_ORG_ID" ] && [ -n "$HCP_PROJECT_ID" ] && echo "HCP org/project set" || echo "HCP_ORG_ID / HCP_PROJECT_ID MISSING"
 echo "== AWS session"
-aws --profile personal sts get-caller-identity --query Account --output text
+aws sts get-caller-identity --query Account --output text
 echo "== GitHub CLI"
 gh auth status 2>&1 | grep -m1 "Logged in"
 echo "== HCP principal"
@@ -35,9 +37,9 @@ env | grep -q AWS_SESSION_TOKEN && echo "WARN - stale AWS_* env keys shadow the 
 echo "== webapp-a production channel (expect N-1)"
 TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
 python3 - "$TOKEN" <<'EOF'
-import json, sys, urllib.request
+import json, os, sys, urllib.request
 H = {"Authorization": "Bearer " + sys.argv[1]}
-base = "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/webapp-a"
+base = "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/" + os.environ["HCP_ORG_ID"] + "/projects/" + os.environ["HCP_PROJECT_ID"] + "/buckets/webapp-a"
 get = lambda p: json.load(urllib.request.urlopen(urllib.request.Request(base + p, headers=H)))
 prod = get("/channels/production")["channel"]["version"]["fingerprint"]
 vers = sorted(get("/versions")["versions"], key=lambda v: v["created_at"])
@@ -472,16 +474,15 @@ Reset for another round
 =======================
 
 ```bash +exec
-export AWS_PROFILE=personal
 [ -f Makefile ] || cd ..
 git restore packer/webapp.pkr.hcl 2>/dev/null || true
 git status --short
 echo "== roll production back to N-1 so the promotion story replays"
 TOKEN=$(curl -s https://auth.idp.hashicorp.com/oauth2/token -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=client_credentials&client_id=$HCP_CLIENT_ID&client_secret=$HCP_CLIENT_SECRET&audience=https://api.hashicorp.cloud" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token',''))")
 python3 - "$TOKEN" <<'EOF'
-import json, sys, urllib.request
+import json, os, sys, urllib.request
 H = {"Authorization": "Bearer " + sys.argv[1], "Content-Type": "application/json"}
-base = "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/53068552-945f-4bf9-bf0a-71a457d452a3/projects/afe3e74a-ee44-4897-a674-c80beb132505/buckets/webapp-a"
+base = "https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/" + os.environ["HCP_ORG_ID"] + "/projects/" + os.environ["HCP_PROJECT_ID"] + "/buckets/webapp-a"
 vers = sorted(json.load(urllib.request.urlopen(urllib.request.Request(base + "/versions", headers=H)))["versions"], key=lambda v: v["created_at"])
 body = json.dumps({"version_fingerprint": vers[-2]["fingerprint"], "update_mask": "versionFingerprint"}).encode()
 urllib.request.urlopen(urllib.request.Request(base + "/channels/production", body, H, method="PATCH"))

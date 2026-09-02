@@ -9,6 +9,7 @@ terraform {
   required_version = ">= 1.5.0"
 
   cloud {
+    # ponytail: HCP Terraform does not allow variables in the cloud block — edit this to your org
     organization = "lab-larry"
 
     workspaces {
@@ -25,14 +26,24 @@ terraform {
 }
 
 provider "aws" {
-  region = "ap-southeast-2"
+  region = var.aws_region
+}
+
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+
+variable "github_repo" {
+  type        = string
+  description = "GitHub repo in owner/name form that CI builds (no default — set it)"
 }
 
 locals {
-  repo              = "songlining/packer-demo"
+  repo              = var.github_repo
   repo_url          = "https://github.com/${local.repo}.git"
   secret_id         = "packer-demo/ci"
-  secret_arn_prefix = "arn:aws:secretsmanager:ap-southeast-2:${data.aws_caller_identity.current.account_id}:secret:${local.secret_id}"
+  secret_arn_prefix = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${local.secret_id}"
 }
 
 data "aws_caller_identity" "current" {}
@@ -57,7 +68,7 @@ data "aws_iam_policy_document" "logs" {
       "logs:PutLogEvents",
       "logs:DescribeLogStreams",
     ]
-    resources = ["arn:aws:logs:ap-southeast-2:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/packer-demo-*"]
+    resources = ["arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/packer-demo-*"]
   }
 }
 
@@ -116,7 +127,7 @@ data "aws_iam_policy_document" "build" {
 
   statement {
     actions   = ["codebuild:StartBuild"]
-    resources = ["arn:aws:codebuild:ap-southeast-2:${data.aws_caller_identity.current.account_id}:project/packer-demo-build"]
+    resources = ["arn:aws:codebuild:${var.aws_region}:${data.aws_caller_identity.current.account_id}:project/packer-demo-build"]
   }
 }
 
@@ -310,7 +321,7 @@ data "aws_iam_policy_document" "pipeline" {
       "codebuild:StopBuild",
       "codebuild:BatchGetBuilds",
     ]
-    resources = ["arn:aws:codebuild:ap-southeast-2:${data.aws_caller_identity.current.account_id}:project/packer-demo-deploy"]
+    resources = ["arn:aws:codebuild:${var.aws_region}:${data.aws_caller_identity.current.account_id}:project/packer-demo-deploy"]
   }
 }
 
@@ -410,7 +421,7 @@ resource "aws_codepipeline" "deploy" {
 # --- Outputs ---------------------------------------------------------------------
 
 output "pipeline_url" {
-  value = "https://ap-southeast-2.console.aws.amazon.com/codesuite/codepipeline/pipelines/packer-demo-deploy/view"
+  value = "https://${var.aws_region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/packer-demo-deploy/view"
 }
 
 output "connection_status" {
