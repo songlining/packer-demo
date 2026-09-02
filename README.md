@@ -110,10 +110,6 @@ approval before deploy**. The Approve stage is why the pipeline exists. Validate
 build need no human gate, so each stays a simple webhook-triggered build — chaining them
 into the pipeline would park every merge behind a manual approve button.
 
-One more thing that looks odd until you know it: the AMI build instance is throwaway —
-Packer creates it, configures it, snapshots it, and terminates it, so the only
-long-running EC2 instance is the *deployed* demo box.
-
 Console: **CodeBuild → Build projects → `packer-demo-build` → Build history**
 https://<region>.console.aws.amazon.com/codesuite/codebuild/projects/packer-demo-build/history
 
