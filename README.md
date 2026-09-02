@@ -104,10 +104,15 @@ builds happen in `packer-demo-build`, not in the pipeline:
 | `packer-demo-build` | **Builds the AMI**: `packer build` → temp EC2 → Ansible → snapshot → HCP Packer (`buildspec/build.yml`) | webhook, push to `main` touching `packer/**` | `build.yml` |
 | `packer-demo-deploy` | Provisioning only: `terraform apply` in the TFC workspace (`buildspec/deploy.yml`) | pipeline Deploy stage after Approve | `deploy.yml` |
 
-Why it looks odd: the build project fires directly off the GitHub webhook, while
-the pipeline (`packer-demo-deploy`: Source → Approve → Deploy) only provisions. The
-AMI build instance is throwaway — Packer creates it, configures it, snapshots it,
-and terminates it, so the only long-running EC2 instance is the *deployed* demo box.
+Why the split? At a glance the AMI build should sit inside the pipeline with everything
+else, but CodePipeline's only job here is the one thing that needs it: the **human
+approval before deploy**. The Approve stage is why the pipeline exists. Validate and
+build need no human gate, so each stays a simple webhook-triggered build — chaining them
+into the pipeline would park every merge behind a manual approve button.
+
+One more thing that looks odd until you know it: the AMI build instance is throwaway —
+Packer creates it, configures it, snapshots it, and terminates it, so the only
+long-running EC2 instance is the *deployed* demo box.
 
 Console: **CodeBuild → Build projects → `packer-demo-build` → Build history**
 https://<region>.console.aws.amazon.com/codesuite/codebuild/projects/packer-demo-build/history
