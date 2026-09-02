@@ -1,22 +1,27 @@
 # packer-demo
 
 End-to-end golden-image pipeline, running on **both** AWS CodeBuild/CodePipeline and
-GitHub Actions in parallel: a GitHub PR kicks off **both** validators; a merge fires
-**both** builders, which build AMIs with **Packer**, register them in **HCP Packer**, and
-**Terraform** (via a **CodePipeline** approval gate) deploys instances pinned to a channel —
-no AMI IDs in code, no static cloud keys anywhere. Source stays in GitHub; the CodeBuild
-projects pull from the same repo through a CodeConnections GitHub App.
+GitHub Actions. The two systems are independent and stay live at the same time, watching
+the same events: a pull request kicks off **both** validators, a merge fires **both**
+builders, and each side produces its own AMI and HCP Packer version of the same commit.
+Builds use **Packer** (Ansible + Trivy inside the image) and register versions in **HCP
+Packer**; deploy is the one choose-your-side step — approve the **CodePipeline** Approve
+stage or run the Actions `deploy` workflow, both of which trigger `terraform apply` in the
+same HCP Terraform workspace and converge on the same instance. No AMI IDs in code, no
+static cloud keys anywhere. Source stays in GitHub; the CodeBuild projects pull from the
+same repo through a CodeConnections GitHub App. The diagram below details the CodeBuild
+path — the Actions flow is identical, just not drawn.
 
 ```mermaid
 flowchart TD
-    PR[Pull Request] --> |checks green · then merge| validate[CodeBuild validate\npacker · ansible · terraform]
-    validate --> build
+    PR[Pull Request] --> |checks green · then merge| cbval[CodeBuild validate\npacker · ansible · terraform]
+    cbval --> cbbuild
 
-    subgraph runner["CodeBuild managed runner"]
-        build[Packer build]
+    subgraph cbrunner["CodeBuild runner — detailed below as the example"]
+        cbbuild[Packer build]
         ansible[Ansible — nginx + app config]
         scan[Trivy scan — non-blocking CVE report]
-        build --> |invokes| ansible
+        cbbuild --> |invokes| ansible
         ansible --> |SSH → applies config| ec2_build[EC2 build instance\ntemporary]
         ansible --> scan
     end
@@ -24,8 +29,13 @@ flowchart TD
     scan --> snapshot[snapshot → AMI]
     snapshot --> hcp[HCP Packer Registry\nversion + labels]
     hcp --> |human promotes to production channel| hcp
-    hcp --> |Terraform reads production channel| deploy[CodePipeline — Approve stage → terraform apply]
+    hcp --> |Terraform reads production channel| deploy[terraform apply —\nCodePipeline Approve stage · or Actions deploy workflow]
     deploy --> ec2[EC2 instance running]
+
+    subgraph gh["GitHub Actions — identical flow, not drawn"]
+        ghnode[Same PR validate → merge build → deploy,\non GitHub-hosted runners,\nregistering into the same HCP Packer buckets]
+    end
+    PR -. parallel twin, same events .- gh
 ```
 
 ## What's in here
