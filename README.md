@@ -61,8 +61,13 @@ ci/README.md           # one-time setup + running both pipelines in parallel
 
 ## Configuration — nothing environment-specific is hardcoded
 
-Every user-specific value is a knob. Secrets go in secrets; the rest are variables.
-Full setup walkthrough: [GITHUB-SETUP.md](GITHUB-SETUP.md) (step 0 is the checklist).
+No account IDs, regions, or names from another environment are baked into this repo.
+Every environment-specific value is set once, per environment, in one of two ways:
+**secrets** (credentials and tokens — GitHub repo secrets for Actions, one Secrets
+Manager secret for CodeBuild) and **variables** (regions, org/project IDs, repo names —
+your choice of GitHub repo variables, Packer/Terraform variables, or CodeBuild env).
+The rule is simple: if it would expose a credential, it's a secret; otherwise it's a
+variable. Full setup walkthrough: [GITHUB-SETUP.md](GITHUB-SETUP.md) (step 0 is the checklist).
 
 | Knob | Where it's read | Default |
 |---|---|---|
