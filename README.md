@@ -93,7 +93,9 @@ of the demo, not account identifiers — safe to leave as-is.
 
 ## Checking on things (CodeBuild 101)
 
-There are **three** CodeBuild projects; the pipeline only wraps one of them. The image
+There are **three** CodeBuild projects, but only the deploy one sits inside the
+pipeline (`packer-demo-deploy`: Source → Approve → Deploy). The other two — validate and
+build — aren't part of it; GitHub webhooks fire them directly. The image
 builds happen in `packer-demo-build`, not in the pipeline:
 
 | Project | What it runs | Triggered by | GH Actions twin |
