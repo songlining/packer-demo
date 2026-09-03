@@ -77,3 +77,16 @@ delete snapshots → (optionally) retire a CI side.
 
 Current live state (instance, AMIs, HCP versions, which side is enabled): see `ci/STATE.md`
 (local only, gitignored — it drifts by design).
+
+## README diagram rendering (mmdc)
+
+```sh
+npm install -g --allow-scripts=puppeteer @mermaid-js/mermaid-cli   # first time only
+awk '/```mermaid/{f=1;next} f&&/```/{f=0} f' README.md > /tmp/diag.mmd
+mmdc -i /tmp/diag.mmd -o /tmp/diag.png
+```
+
+- npm's allow-scripts guard blocks puppeteer's Chrome download by default — the
+  `--allow-scripts=puppeteer` flag is required or mmdc fails at render.
+- mmdc expects the raw mermaid code, NOT the ```mermaid fence — strip it (the
+  awk above handles that).
