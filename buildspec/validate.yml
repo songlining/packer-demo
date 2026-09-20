@@ -19,7 +19,7 @@ phases:
 
   build:
     commands:
-      - cd packer && packer init .
+      - cd packer && packer init plugins.pkr.hcl   # dir mode parses every template and hits duplicate variables
       - for f in *.pkr.hcl; do [ "$f" = "plugins.pkr.hcl" ] && continue; echo "== $f"; packer validate "$f"; done   # per-file; dir validate hits duplicate patch_level
       - cd ..
       - ansible-playbook --syntax-check packer/playbooks/webapp.yml

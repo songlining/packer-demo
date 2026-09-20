@@ -14,7 +14,7 @@ jobs:
       - name: Validate all Packer templates (per-file; dir validate hits duplicate patch_level)
         working-directory: packer
         run: |
-          packer init .
+          packer init plugins.pkr.hcl   # dir mode parses every template and hits duplicate variables
           for f in *.pkr.hcl; do
             [ "$f" = "plugins.pkr.hcl" ] && continue   # requirement-only file, no build block by design
             echo "::group::$f"

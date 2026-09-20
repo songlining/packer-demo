@@ -59,13 +59,15 @@ jobs:
       - name: Packer build
         working-directory: packer
         run: |
-          packer init .
+          # dir mode (packer init .) parses every template and hits duplicate variables
+          packer init plugins.pkr.hcl
+          REGION="${AWS_REGION:-us-east-1}"   # exported by configure-aws-credentials (vars.AWS_REGION)
           if [ "${{ steps.pick.outputs.template }}" = "base-os.pkr.hcl" ]; then
             PL="${{ github.event.inputs.patch_level }}"
             PL="${PL:-$(date +%Y-%m)}"
-            packer build -var "patch_level=$PL" base-os.pkr.hcl
+            packer build -var "patch_level=$PL" -var "aws_region=$REGION" base-os.pkr.hcl
           else
-            packer build "${{ steps.pick.outputs.template }}"
+            packer build -var "aws_region=$REGION" "${{ steps.pick.outputs.template }}"
           fi
 
       - name: Pin base-os channel and cascade to webapp

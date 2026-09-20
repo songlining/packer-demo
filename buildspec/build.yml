@@ -45,13 +45,15 @@ phases:
 
   build:
     commands:
-      - cd packer && packer init .
+      # dir mode (packer init .) parses every template and hits duplicate variables
+      - cd packer && packer init plugins.pkr.hcl
       - |
+        REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-east-1}}"   # CodeBuild sets these to the project's region
         if [ "$T" = "base-os.pkr.hcl" ]; then
           PL="${PATCH_LEVEL:-$(date +%Y-%m)}"
-          packer build -var "patch_level=$PL" base-os.pkr.hcl
+          packer build -var "patch_level=$PL" -var "aws_region=$REGION" base-os.pkr.hcl
         else
-          packer build "$T"
+          packer build -var "aws_region=$REGION" "$T"
         fi
 
   post_build:

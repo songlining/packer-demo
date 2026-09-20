@@ -232,7 +232,7 @@ your AWS profile logged in (only the proof and cleanup slides touch AWS).
 ## Local runs
 
 ```sh
-cd packer && packer init . && packer validate webapp.pkr.hcl   # per-file; dir mode conflicts on purpose
+cd packer && packer init plugins.pkr.hcl && packer validate webapp.pkr.hcl   # per-file; dir mode conflicts on purpose
 packer build -var aws_region=<region> base-os.pkr.hcl   # first run only (~4 min), then assign to `production` channel
 packer build webapp.pkr.hcl    # ~6 min
 cd ../terraform && terraform apply    # -var aws_region=<region> if not us-east-1
