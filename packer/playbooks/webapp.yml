@@ -16,3 +16,4 @@
         name: nginx
         state: started
         enabled: true
+# dry-run: verifies the PR validate gate (safe to discard)
