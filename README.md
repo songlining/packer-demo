@@ -2,8 +2,10 @@
 
 End-to-end golden-image pipeline, running on **both** AWS CodeBuild/CodePipeline and
 GitHub Actions. The two systems are independent and stay live at the same time, watching
-the same events: a pull request kicks off **both** validators, a merge fires **both**
-builders, and each side produces its own AMI and HCP Packer version of the same commit.
+the same events: a pull request kicks off **both** validators simultaneously, a merge
+fires **both** builders simultaneously, and each side produces its own AMI and HCP Packer
+version of the same commit. **Running both pipelines in parallel is intentional for demo
+purposes** — it lets you compare the two CI systems side by side on identical inputs.
 Builds use **Packer** (Ansible + Trivy inside the image) and register versions in **HCP
 Packer**; deploy is the one choose-your-side step — approve the **CodePipeline** Approve
 stage or run the Actions `deploy` workflow, both of which trigger `terraform apply` in the
@@ -108,7 +110,7 @@ of the demo, not account identifiers — safe to leave as-is.
 
 1. Branch, edit `packer/playbooks/webapp.yml` (e.g. the index page), open a PR → `validate` goes green
 2. Merge → `build` runs → new version appears in HCP Packer with labels and lineage back to `base-os`
-3. Assign the version to the `production` channel (HCP Packer UI, one click)
+3. Assign the version to the `production` channel (HCP Packer UI, one click). Alternatively, you can of course do this via the pipeline.
 4. Deploy — either side: approve the pipeline's **Approve** stage (`packer-demo-deploy`), or `gh workflow run deploy.yml` for the Actions twin
 5. Bonus: set Trivy `--exit-code` to `1` in `webapp.pkr.hcl`, PR a vulnerable package → build goes red, image never reaches the channel
 
